@@ -3,94 +3,152 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PMO練習 議事録ゲーム</title>
+  <title>議事録クエスト - PMO練習</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📝%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <header>
-    <h1>PMO練習 <span>議事録ゲーム</span></h1>
+  <header class="top">
+    <div class="brand"><span class="logo" aria-hidden="true">📝</span><div><b>議事録クエスト</b><small>PMO練習ゲーム</small></div></div>
+    <div class="me" id="me" aria-label="あなたの成績"></div>
   </header>
 
   <main>
-    <!-- 1. シナリオ選択 -->
+    <!-- 1. ホーム -->
     <section id="screen-select">
-      <h2>シナリオを選ぶ</h2>
-      <div id="scenario-list"></div>
-      <h2>これまでの記録</h2>
+      <div class="hero">
+        <div class="hero-text">
+          <h1>会議を聞いて、まとめきれ!</h1>
+          <p>決定事項・ToDo・課題を拾って議事録を書き、AIと一緒にレベルアップ。</p>
+        </div>
+        <div class="hero-art" aria-hidden="true">🎧</div>
+      </div>
+      <div id="ai-status-home" class="ai-status" role="status"></div>
+
+      <h2 class="sec">🎮 ステージを選ぶ</h2>
+      <div id="scenario-list" class="stages"></div>
+
+      <h2 class="sec">🏅 バッジ</h2>
+      <div id="badge-shelf" class="badges"></div>
+
+      <h2 class="sec">📈 これまでの記録</h2>
       <div id="history"></div>
     </section>
 
     <!-- 2. 会議 + 議事録入力 -->
     <section id="screen-play" hidden>
-      <h2 id="play-title"></h2>
-      <div class="card">
+      <h2 id="play-title" class="play-title"></h2>
+
+      <div class="room">
         <div class="player">
-          <button id="btn-play" class="primary">▶ 会議音声を再生</button>
-          <button id="btn-stop">■ 停止</button>
-          <span id="play-status"></span>
+          <button id="btn-play" class="btn big primary">▶ 会議を聞く</button>
+          <button id="btn-stop" class="btn">■ 停止</button>
+          <span class="plays" aria-label="残りの再生回数"><span id="plays-icons"></span><span class="sr" id="plays-left"></span></span>
         </div>
-        <p class="hint">再生は<strong id="plays-left"></strong>回まで。聞きながらメモを取り、議事録にまとめましょう。</p>
         <div id="cast" class="cast" aria-label="会議の参加者"></div>
-        <div id="now-speaking" aria-live="polite"></div>
+        <div id="now-speaking" class="now" aria-live="polite"></div>
         <div id="subtitle" class="subtitle" hidden></div>
-        <label class="opt"><input type="checkbox" id="opt-subtitle"> 字幕を表示する(難易度が下がります)</label>
-        <p class="hint" id="voice-info"></p>
+        <div class="room-foot">
+          <label class="opt dark"><input type="checkbox" id="opt-subtitle"> 字幕を表示(難易度が下がります)</label>
+          <span id="play-status" class="dim"></span>
+        </div>
+        <p class="dim small" id="voice-info"></p>
       </div>
 
-      <div class="card">
-        <label for="minutes"><strong>議事録</strong>(決定事項 / ToDo / 課題 / 次回予定 を整理して書く)</label>
-        <textarea id="minutes" rows="16" placeholder="【決定事項】&#10;・&#10;&#10;【ToDo】(誰が・何を・いつまでに)&#10;・&#10;&#10;【課題・懸念】&#10;・&#10;&#10;【次回予定】&#10;・"></textarea>
-        <div class="row">
-          <button id="btn-template">テンプレートを挿入</button>
-          <span id="char-count"></span>
+      <div class="paper-card">
+        <div class="paper-head">
+          <label for="minutes"><b>📓 議事録ノート</b></label>
+          <span id="char-count" class="dim"></span>
         </div>
+        <div class="tpl-bar">
+          <select id="tpl-select" aria-label="テンプレートを選ぶ"></select>
+          <button id="btn-tpl-insert" class="btn small">挿入</button>
+          <button id="btn-tpl-save" class="btn small">💾 いまの内容を保存</button>
+          <button id="btn-tpl-manage" class="btn small">⚙ 管理</button>
+        </div>
+        <textarea id="minutes" rows="16" placeholder="聞きながらメモ → 議事録にまとめましょう。テンプレートを入れると書きやすくなります。"></textarea>
       </div>
+
+      <div id="ai-status-play" class="ai-status" role="status"></div>
       <div class="row">
-        <button id="btn-back">← 戻る</button>
-        <span class="opt-wrap"><label class="opt"><input type="checkbox" id="opt-ai" checked> AI採点も使う</label>
-        <button id="btn-submit" class="primary">採点する</button></span>
+        <button id="btn-back" class="btn">← 戻る</button>
+        <span class="opt-wrap">
+          <label class="opt"><input type="checkbox" id="opt-ai" checked> AI採点も使う</label>
+          <button id="btn-submit" class="btn big primary">✅ 提出して採点</button>
+        </span>
       </div>
     </section>
 
     <!-- 3. 結果 -->
     <section id="screen-result" hidden>
-      <h2>採点結果</h2>
       <div class="card score-card">
-        <div class="rank" id="res-rank"></div>
-        <div class="total"><span id="res-total"></span><small> / 100</small></div>
+        <div class="stamp" id="res-rank" aria-label="ランク"></div>
+        <div class="total"><span id="res-total">0</span><small> / 100点</small></div>
+        <div id="res-new-best" class="new-best" hidden>🎉 自己ベスト更新!</div>
         <ul class="breakdown" id="res-breakdown"></ul>
         <div id="res-final" class="final" hidden></div>
+        <div id="res-xp" class="xpgain"></div>
       </div>
+
       <div class="card" id="ai-card" hidden>
-        <h3>AIによる評価 <span class="badge" id="ai-badge"></span></h3>
+        <h3>🤖 AIによる評価 <span class="badge" id="ai-badge"></span></h3>
         <div id="ai-body"></div>
       </div>
       <div class="card" id="redpen-card" hidden>
-        <h3>赤ペン添削</h3>
+        <h3>🖍 赤ペン添削</h3>
         <div id="redpen-text" class="redpen-text"></div>
         <ol id="redpen-list" class="redpen-list"></ol>
       </div>
       <div class="card">
-        <h3>模範解答</h3>
+        <h3>📖 模範解答</h3>
         <div class="row"><span class="hint" id="model-note">答え合わせ用の議事録です。</span>
-          <span><button id="btn-model">模範解答を見る</button> <button id="btn-model-ai" hidden>AIで作り直す</button></span></div>
+          <span class="btns"><button id="btn-model" class="btn small">模範解答を見る</button> <button id="btn-model-ai" class="btn small" hidden>AIで作り直す</button></span></div>
         <pre id="model-body" class="model" hidden></pre>
       </div>
-      <div class="card"><h3>要点のチェック</h3><ul id="res-points" class="points"></ul></div>
+      <div class="card"><h3>🎯 ミッション(要点)チェック</h3><ul id="res-points" class="points"></ul></div>
       <div class="card" id="res-warn" hidden></div>
       <div class="card">
-        <h3>会議の台本(答え合わせ)</h3>
+        <h3>🎙 会議の台本(答え合わせ)</h3>
         <ol id="res-script" class="script"></ol>
       </div>
       <div class="row">
-        <button id="btn-retry">もう一度</button>
-        <button id="btn-home" class="primary">シナリオ選択へ</button>
+        <button id="btn-retry" class="btn">もう一度挑戦</button>
+        <button id="btn-home" class="btn big primary">ステージ選択へ</button>
       </div>
     </section>
   </main>
 
+  <!-- テンプレート管理 -->
+  <dialog id="tpl-dialog" aria-labelledby="tpl-title">
+    <form method="dialog" class="dlg-head"><h3 id="tpl-title">議事録テンプレート</h3><button class="btn small" aria-label="閉じる">✕</button></form>
+    <div class="dlg-body">
+      <div id="tpl-list" class="tpl-list"></div>
+      <div class="tpl-editor">
+        <label class="lbl" for="tpl-name">テンプレート名</label>
+        <input id="tpl-name" type="text" maxlength="40" placeholder="例: 定例会議用">
+        <label class="lbl" for="tpl-body">内容</label>
+        <textarea id="tpl-body" rows="10" placeholder="【決定事項】&#10;・"></textarea>
+        <label class="opt"><input type="checkbox" id="tpl-default"> 新しいゲームを始めるとき、自動でノートに入れる</label>
+        <p class="hint" id="tpl-note"></p>
+        <div class="row">
+          <button id="tpl-delete" class="btn small danger">削除</button>
+          <span class="btns">
+            <button id="tpl-new" class="btn small">新規にする</button>
+            <button id="tpl-save" class="btn primary">保存</button>
+          </span>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <div id="confetti" class="confetti" aria-hidden="true"></div>
+
   <script src="js/scenarios.js"></script>
   <script src="js/scoring.js"></script>
+  <script src="js/store.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

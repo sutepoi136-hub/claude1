@@ -13,7 +13,7 @@ test('server: キー無しは503、静的配信は公開ファイルだけ', asy
     for (const p of ['/server.js', '/lib/ai-review.js', '/package.json', '/.env', '/js/../server.js', '/%2e%2e/server.js']) {
       assert.equal((await fetch(base + p)).status, 404, p);
     }
-    assert.deepEqual(await (await fetch(base + '/api/status')).json(), { ai: false });
+    assert.deepEqual(await (await fetch(base + '/api/status')).json(), { app: 'pmo-practice', ai: false, mock: false });
     const r = await post('/api/review', { scenarioId: 'web-renewal-1', minutes: 'x'.repeat(30) });
     assert.equal(r.status, 503);
     assert.equal((await r.json()).error, 'no_key');

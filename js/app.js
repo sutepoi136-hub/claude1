@@ -1,70 +1,168 @@
 (function () {
   const MAX_PLAYS = 2;
   const GAP_MS = 450; // 発言と発言の間の間(ま)
-  const STORE_KEY = 'pmo-minutes-history-v1';
   const $ = (id) => document.getElementById(id);
   const screens = ['select', 'play', 'result'];
   const KIND_LABEL = { error: '誤り', improve: '改善', missing: '抜け漏れ', good: '良い点' };
+  const RANK_COLOR = { S: '#f59e0b', A: '#7c3aed', B: '#0d9488', C: '#2563eb', D: '#64748b' };
+  const STAGE_ICON = ['🌱', '🔥', '⚡'];
+  const LEVEL_STARS = { 初級: 1, 中級: 2, 上級: 3 };
+  const reducedMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   let scenario = null;
   let playsLeft = MAX_PLAYS;
   let speaking = false;
   let runId = 0; // 再生のキャンセル用トークン
   let voiceMap = {};
   let historyAt = null;
-  let lastFormal = null;
-  let lastMinutes = '';
+  let beforeHistory = [];
+  let hadBestBefore = null;
+  let tplData = Store.templates();
+  let tplEditingId = null;
+  let aiProbe = null;
+  let celebrated = false; // 結果画面ごとに紙吹雪は1回だけ
 
-  const TEMPLATE = '【決定事項】\n・\n\n【ToDo】(誰が・何を・いつまでに)\n・\n\n【課題・懸念】\n・\n\n【次回予定】\n・';
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   function show(name) {
     screens.forEach((s) => ($('screen-' + s).hidden = s !== name));
     window.scrollTo(0, 0);
   }
-  function esc(s) {
-    return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function toast(msg) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    $('toasts').appendChild(el);
+    setTimeout(() => el.classList.add('out'), 3800);
+    setTimeout(() => el.remove(), 4300);
   }
 
-  // ---- 履歴 ----
-  function loadHistory() {
-    try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; } catch (e) { return []; }
-  }
-  function writeHistory(h) {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(h.slice(-100))); } catch (e) { /* 保存不可でも続行 */ }
-  }
-  function saveHistory(entry) { const h = loadHistory(); h.push(entry); writeHistory(h); }
-  function updateHistory(at, patch) {
-    const h = loadHistory();
-    const e = h.find((x) => x.at === at);
-    if (e) { Object.assign(e, patch); writeHistory(h); }
+  function confetti(count = 70) {
+    if (reducedMotion) return;
+    const colors = ['#ffb703', '#ff5d8f', '#5b4bd6', '#22c55e', '#38bdf8'];
+    const box = $('confetti');
+    for (let i = 0; i < count; i++) {
+      const p = document.createElement('i');
+      p.style.cssText = `left:${Math.random() * 100}vw;--c:${colors[i % colors.length]};--x:${(Math.random() - 0.5) * 200}px;--d:${2.4 + Math.random() * 2}s;--delay:${Math.random() * 0.6}s`;
+      box.appendChild(p);
+    }
+    setTimeout(() => (box.innerHTML = ''), 5500);
   }
 
-  // ---- シナリオ選択 + 履歴 ----
-  function renderSelect() {
-    $('scenario-list').innerHTML = SCENARIOS.map(
-      (s) => `<div class="card scn"><div><strong>${esc(s.title)}</strong><span class="badge">${esc(s.level)}</span>
-        <div class="hint">${esc(s.description)}</div></div>
-        <button class="primary" data-id="${s.id}">開始</button></div>`
+  function countUp(el, to) {
+    if (reducedMotion) { el.textContent = to; return; }
+    const t0 = performance.now();
+    const step = (t) => {
+      const k = Math.min(1, (t - t0) / 800);
+      el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3)));
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  // ---- 成績・バッジ ----
+  function renderMe() {
+    const h = Store.history();
+    const lv = Game.levelInfo(Game.xpOf(h));
+    const streak = Game.streakOf(h);
+    $('me').innerHTML =
+      `<div class="lv"><div class="t"><span>Lv.${lv.level} ${esc(lv.title)}</span><span>${lv.xp - lv.floor}/${lv.next - lv.floor} XP</span></div><div class="bar"><i style="width:${lv.pct}%"></i></div></div>` +
+      `<span class="chip" title="連続プレイ日数">🔥 ${streak}日</span>`;
+  }
+
+  function renderBadges() {
+    const earned = new Set(Game.badgesOf(Store.history(), SCENARIOS));
+    $('badge-shelf').innerHTML = Game.BADGES.map((b) =>
+      `<div class="bd ${earned.has(b.id) ? 'earned' : 'locked'}"><div class="i">${earned.has(b.id) ? b.icon : '🔒'}</div><b>${esc(b.name)}</b><small>${esc(b.desc)}</small></div>`
     ).join('');
-    $('scenario-list').querySelectorAll('button').forEach((b) =>
-      b.addEventListener('click', () => start(SCENARIOS.find((s) => s.id === b.dataset.id)))
+  }
+
+  // 新しく獲得したバッジをトーストで知らせる(初回起動時は既存分を黙って記録)
+  function announceBadges() {
+    const now = Game.badgesOf(Store.history(), SCENARIOS);
+    const seen = Store.seenBadges();
+    if (seen) {
+      now.filter((id) => !seen.includes(id)).forEach((id, i) => {
+        const b = Game.BADGES.find((x) => x.id === id);
+        setTimeout(() => toast(`${b.icon} 新バッジ「${b.name}」を獲得!`), i * 900);
+      });
+    }
+    Store.saveSeenBadges(now);
+  }
+
+  // ---- AI接続の診断 ----
+  async function probeAi() {
+    if (location.protocol === 'file:') return { state: 'file' };
+    let res;
+    try { res = await fetch('/api/status', { cache: 'no-store' }); } catch (e) { return { state: 'down' }; }
+    let data;
+    try { data = await res.json(); } catch (e) { return { state: 'static' }; }
+    if (!data || data.app !== 'pmo-practice') return { state: 'static' };
+    return data.ai ? { state: 'ok', mock: data.mock } : { state: 'nokey' };
+  }
+
+  const START_STEPS = '<ol><li>フォルダ内の <code>start.bat</code>(Windows)をダブルクリック。Mac は、ターミナルで <code>bash start.sh</code></li><li>黒い画面に表示された <code>http://localhost:8000</code> をブラウザで開く</li></ol>';
+  const DIAG = {
+    ok: (p) => ({ cls: 'ok', html: `<b>🤖 AI採点: 使えます${p.mock ? '(ダミー応答モード)' : ''}</b>` }),
+    nokey: () => ({ cls: 'warn', html: '<b>🔑 AIサーバーは動いていますが、APIキーが未設定です</b><ol><li>フォルダ内の <code>.env.example</code> を <code>.env</code> という名前にコピー</li><li><code>.env</code> を開き、<code>ANTHROPIC_API_KEY=</code> の右にAPIキーを書いて保存</li><li>黒い画面を閉じて <code>start.bat</code> をもう一度実行</li></ol><span class="hint">キーがなくても形式採点は遊べます。</span>' }),
+    down: () => ({ cls: 'bad', html: `<b>🔌 AIサーバーが起動していません</b>${START_STEPS}` }),
+    static: () => ({ cls: 'bad', html: `<b>⚠ このページはAIサーバーではなく、普通のWebサーバーで開かれています</b><span class="hint">(python の http.server などで起動していませんか?)</span>${START_STEPS}` }),
+    file: () => ({ cls: 'bad', html: `<b>⚠ ファイルを直接開いています(index.html のダブルクリック)</b><span class="hint">AI採点にはサーバーの起動が必要です。</span>${START_STEPS}` }),
+  };
+
+  async function refreshAiStatus(force) {
+    if (force || !aiProbe) aiProbe = await probeAi();
+    const d = DIAG[aiProbe.state](aiProbe);
+    const retry = aiProbe.state === 'ok' ? '' : '<br><button class="btn small" data-retry>🔄 もう一度確認</button>';
+    ['home', 'play'].forEach((k) => {
+      const el = $('ai-status-' + k);
+      el.className = 'ai-status ' + d.cls;
+      el.innerHTML = d.html + retry;
+      const b = el.querySelector('[data-retry]');
+      if (b) b.addEventListener('click', () => refreshAiStatus(true));
+    });
+    $('opt-ai').checked = aiProbe.state === 'ok';
+    $('opt-ai').disabled = aiProbe.state !== 'ok';
+    return aiProbe;
+  }
+
+  // ---- ホーム ----
+  function renderSelect() {
+    renderMe();
+    const history = Store.history();
+    const best = Game.bestByScenario(history);
+    $('scenario-list').innerHTML = SCENARIOS.map((s, i) => {
+      const stars = LEVEL_STARS[s.level] || 1;
+      const b = best[s.id];
+      return `<div class="stage"><div class="ico" aria-hidden="true">${STAGE_ICON[i % STAGE_ICON.length]}</div>
+        <div><div class="ttl">${esc(s.title)}</div>
+        <div class="stars" aria-label="難易度 ${esc(s.level)}">${'★'.repeat(stars)}<s>${'★'.repeat(3 - stars)}</s> <span class="badge">${esc(s.level)}</span></div>
+        <div class="hint">${esc(s.description)}</div>
+        <div class="best">${b ? `<span class="medal" style="--rc:${RANK_COLOR[b.rank]}">${b.rank}</span>自己ベスト ${b.total}点` : '未クリア'}</div></div>
+        <button class="btn primary" data-id="${s.id}">${b ? '再挑戦' : '挑戦する'}</button></div>`;
+    }).join('');
+    $('scenario-list').querySelectorAll('button').forEach((el) =>
+      el.addEventListener('click', () => start(SCENARIOS.find((s) => s.id === el.dataset.id)))
     );
-    const h = loadHistory().slice().reverse();
-    if (!h.length) { $('history').innerHTML = '<p class="hint">まだ記録がありません。</p>'; return; }
-    $('history').innerHTML =
-      `<div class="card">${chartSvg(h.slice().reverse().map((x) => x.total))}` +
-      h.slice(0, 10).map((x) =>
-        `<div class="h-item"><span>${new Date(x.at).toLocaleString('ja-JP')} ${esc(x.title)}${x.ai ? ' <span class="badge">AI</span>' : ''}</span><strong>${x.rank} ${x.total}点</strong></div>`
-      ).join('') + '</div>';
+    renderBadges();
+    const h = history.slice().reverse();
+    $('history').innerHTML = !h.length
+      ? '<div class="card"><p class="hint">まだ記録がありません。最初のステージに挑戦しましょう!</p></div>'
+      : `<div class="card">${chartSvg(h.slice().reverse().map((x) => x.total))}` +
+        h.slice(0, 10).map((x) =>
+          `<div class="h-item"><span>${new Date(x.at).toLocaleString('ja-JP')} ${esc(x.title)}${x.ai ? ' <span class="badge">AI</span>' : ''}</span><strong>${x.rank} ${x.total}点</strong></div>`
+        ).join('') + '</div>';
   }
 
   function chartSvg(values) {
     const v = values.slice(-20);
     if (v.length < 2) return '<p class="hint">2回以上プレイすると成長グラフが表示されます。</p>';
-    const W = 600, H = 110, pad = 12;
+    const W = 600, H = 120, pad = 14;
     const pts = v.map((y, i) => [pad + (i * (W - pad * 2)) / (v.length - 1), H - pad - (y / 100) * (H - pad * 2)]);
     return `<svg id="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="スコア推移">
-      <polyline fill="none" stroke="var(--primary)" stroke-width="2.5" points="${pts.map((p) => p.join(',')).join(' ')}"/>
-      ${pts.map((p) => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="var(--primary)"/>`).join('')}</svg>`;
+      <polyline fill="none" stroke="var(--primary)" stroke-width="3" stroke-linejoin="round" points="${pts.map((p) => p.join(',')).join(' ')}"/>
+      ${pts.map((p) => `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="var(--accent)" stroke="var(--primary)" stroke-width="2"/>`).join('')}</svg>`;
   }
 
   // ---- 声の割り当て ----
@@ -76,13 +174,12 @@
     return vs.filter((v) => v.lang && v.lang.toLowerCase().replace('_', '-').startsWith('ja'));
   }
 
-  // 話者ごとに別の声を割り当てる。声の種類が足りない場合は pitch / rate の差を強めて区別する。
+  // 話者ごとに別の声を割り当てる。声の種類が足りない場合は pitch / rate の差で区別する。
   function assignVoices(speakers) {
     const pool = jaVoices();
     const used = new Set();
     const map = {};
-    const names = Object.keys(speakers);
-    names.forEach((n) => {
+    Object.keys(speakers).forEach((n) => {
       const want = speakers[n].voice;
       const hint = want === 'female' ? FEMALE_HINT : MALE_HINT;
       const other = want === 'female' ? MALE_HINT : FEMALE_HINT;
@@ -100,7 +197,7 @@
   function renderCast() {
     $('cast').className = 'cast idle';
     $('cast').innerHTML = Object.entries(scenario.speakers).map(
-      ([n, sp]) => `<div class="who" data-name="${esc(n)}" style="--c:${sp.color || '#2563eb'}">
+      ([n, sp]) => `<div class="who" data-name="${esc(n)}" style="--c:${sp.color || '#5b4bd6'}">
         <div class="avatar" aria-hidden="true">${esc(n.slice(0, 1))}</div>
         <div class="nm">${esc(n)}</div><div class="rl">${esc(sp.role)}</div></div>`
     ).join('');
@@ -110,8 +207,7 @@
     $('cast').querySelectorAll('.who').forEach((el) => el.classList.toggle('active', el.dataset.name === name));
   }
   function setSubtitle(text) {
-    const on = $('opt-subtitle').checked;
-    $('subtitle').hidden = !on || !text;
+    $('subtitle').hidden = !$('opt-subtitle').checked || !text;
     $('subtitle').textContent = text || '';
   }
 
@@ -121,7 +217,6 @@
     playsLeft = MAX_PLAYS;
     stopSpeech();
     $('play-title').textContent = s.title;
-    $('minutes').value = '';
     $('now-speaking').textContent = '';
     setSubtitle('');
     renderCast();
@@ -133,36 +228,43 @@
       : count === 0
         ? '日本語の音声が見つかりません。ブラウザやOSの音声設定をご確認ください。'
         : `日本語音声 ${count} 種類を使用。${shared ? '声の種類が足りないため、一部は声の高さと速さで区別しています。' : ''}`;
+    // 既定テンプレートがあれば最初からノートに入れる
+    tplData = Store.templates();
+    const def = tplData.defaultId && Templates.find(tplData, tplData.defaultId);
+    $('minutes').value = def ? def.body : '';
+    renderTplSelect();
     updatePlayUi();
     updateCount();
     show('play');
+    refreshAiStatus(true); // サーバーが途中で止まっていても気づけるよう、開始のたびに再確認
   }
 
   function updatePlayUi() {
-    $('plays-left').textContent = playsLeft;
+    $('plays-icons').innerHTML = Array.from({ length: MAX_PLAYS }, (_, i) => `<span class="${i < playsLeft ? '' : 'off'}">🎧</span>`).join('');
+    $('plays-left').textContent = `残り${playsLeft}回`;
     $('btn-play').disabled = playsLeft <= 0 || speaking;
     $('btn-stop').disabled = !speaking;
-    $('play-status').textContent = speaking ? '再生中…' : playsLeft <= 0 ? '再生回数を使い切りました' : '';
+    $('play-status').textContent = speaking ? '再生中…' : playsLeft <= 0 ? '再生回数を使い切りました' : `あと${playsLeft}回聞けます`;
   }
   function updateCount() { $('char-count').textContent = $('minutes').value.length + ' 文字'; }
 
   function speakLine(i, id) {
     if (id !== runId) return;
     const lines = scenario.script;
-    if (i >= lines.length) { finishSpeech('再生が終わりました。'); return; }
+    if (i >= lines.length) { finishSpeech('会議が終わりました。議事録にまとめましょう!'); return; }
     const [name, text] = lines[i];
     const sp = scenario.speakers[name] || {};
     const vm = voiceMap[name] || {};
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'ja-JP';
     if (vm.voice) u.voice = vm.voice;
-    // 声の種類が足りない場合に備え、話者ごとの pitch / rate を常に反映して聞き分けやすくする
+    // 声の種類が足りない場合に備え、話者ごとの pitch / rate を常に反映する
     u.pitch = Math.min(2, Math.max(0.1, sp.pitch || 1));
     u.rate = Math.min(2, Math.max(0.5, sp.rate || 1));
     u.onstart = () => {
       if (id !== runId) return;
       setActive(name);
-      $('now-speaking').textContent = `🔊 ${name}(${sp.role || ''})が発言中  ${i + 1} / ${lines.length}`;
+      $('now-speaking').textContent = `${name}(${sp.role || ''})が発言中  ${i + 1} / ${lines.length}`;
       setSubtitle(`${name}: ${text}`);
     };
     let advanced = false;
@@ -204,30 +306,41 @@
     runId++;
     if ('speechSynthesis' in window) speechSynthesis.cancel();
     speaking = false;
-    if (scenario && $('cast')) setActive(null);
+    if (scenario) setActive(null);
   }
 
   // ---- 採点 + 結果 ----
-  async function submit() {
+  function submit() {
     const minutes = $('minutes').value.trim();
-    if (minutes.length < 20) { alert('議事録がまだ短すぎます。もう少し書いてから採点してください。'); return; }
+    if (minutes.length < 20) { alert('議事録がまだ短すぎます。もう少し書いてから提出してください。'); return; }
     stopSpeech();
     const r = evaluate(scenario, minutes);
-    lastFormal = r;
-    lastMinutes = minutes;
+    const history = Store.history();
+    beforeHistory = history.slice();
+    const prevBest = Game.bestByScenario(history)[scenario.id];
+    hadBestBefore = prevBest ? prevBest.total : null;
     historyAt = Date.now();
-    saveHistory({ at: historyAt, scenarioId: scenario.id, title: scenario.title, total: r.total, rank: r.rank, breakdown: r.breakdown });
+    history.push({
+      at: historyAt, scenarioId: scenario.id, title: scenario.title, total: r.total, rank: r.rank,
+      breakdown: r.breakdown, traps: r.triggered.length,
+    });
+    Store.saveHistory(history);
     renderResult(r);
     show('result');
-    if ($('opt-ai').checked) runAiReview(scenario, minutes, r, historyAt);
+    afterScoreUpdate(r.total, r.rank);
+    if ($('opt-ai').checked && !$('opt-ai').disabled) runAiReview(scenario, minutes, r, historyAt);
   }
 
   function renderResult(r) {
-    $('res-rank').textContent = r.rank;
-    $('res-total').textContent = r.total;
+    celebrated = false;
+    $('res-rank').textContent = '';
+    $('res-rank').removeAttribute('data-rank');
+    $('res-total').textContent = '0';
+    $('res-new-best').hidden = true;
     $('res-breakdown').innerHTML =
       `<li>網羅性 ${r.breakdown.coverage}/70</li><li>構造化 ${r.breakdown.structure}/15</li><li>正確性 ${r.breakdown.accuracy}/15</li>`;
     $('res-final').hidden = true;
+    $('res-xp').innerHTML = '';
     $('ai-card').hidden = true;
     $('redpen-card').hidden = true;
     $('model-body').hidden = true;
@@ -235,15 +348,38 @@
     $('btn-model').textContent = '模範解答を見る';
     $('model-note').textContent = '答え合わせ用の議事録です。';
     $('res-points').innerHTML = r.results.map((p) =>
-      `<li><span class="${p.found ? 'ok' : 'ng'}">${p.found ? '✔' : '✘'}</span> <span class="badge">${TYPE_LABELS[p.type]}</span> ${esc(p.label)}</li>`
+      `<li><span class="${p.found ? 'ok' : 'ng'}">${p.found ? '✔ クリア' : '✘ 未達'}</span> <span class="badge">${TYPE_LABELS[p.type]}</span> ${esc(p.label)}</li>`
     ).join('');
     const warns = r.triggered.map((t) => `<p class="ng">⚠ ${esc(t.label)}</p>`);
     if (r.verbose) warns.push('<p class="warn">議事録が長めです。要点に絞ると読みやすくなります。</p>');
     $('res-warn').hidden = !warns.length;
-    $('res-warn').innerHTML = '<h3>注意点</h3>' + warns.join('');
+    $('res-warn').innerHTML = '<h3>⚠ 注意点</h3>' + warns.join('');
     $('res-script').innerHTML = scenario.script.map(([n, t]) =>
       `<li><b>${esc(n)}(${esc((scenario.speakers[n] || {}).role || '')})</b>: ${esc(t)}</li>`
     ).join('');
+  }
+
+  // スコアが確定(形式採点のあと、AIボーナス反映のあと)するたびに、演出・XP・バッジを更新する
+  function afterScoreUpdate(total, rank) {
+    const stamp = $('res-rank');
+    stamp.textContent = rank;
+    stamp.dataset.rank = rank;
+    if (!reducedMotion) { stamp.classList.remove('pop'); void stamp.offsetWidth; stamp.classList.add('pop'); }
+    countUp($('res-total'), total);
+
+    const nowHistory = Store.history();
+    const gain = Game.xpOf(nowHistory) - Game.xpOf(beforeHistory);
+    const lvBefore = Game.levelInfo(Game.xpOf(beforeHistory));
+    const lvAfter = Game.levelInfo(Game.xpOf(nowHistory));
+    $('res-xp').innerHTML =
+      `<span class="pill">+${gain} XP</span>` +
+      (lvAfter.level > lvBefore.level ? `<span class="lvup">🎊 レベルアップ! Lv.${lvAfter.level}「${esc(lvAfter.title)}」</span>` : '');
+    const isBest = hadBestBefore !== null && total > hadBestBefore;
+    $('res-new-best').hidden = !isBest;
+    const big = rank === 'S' || rank === 'A' || isBest || lvAfter.level > lvBefore.level;
+    if (big && !celebrated) { celebrated = true; confetti(rank === 'S' ? 120 : 70); }
+    renderMe();
+    announceBadges();
   }
 
   // ---- AI ----
@@ -252,17 +388,25 @@
     try {
       res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     } catch (e) {
-      throw new Error('AIサーバーに接続できません。`npm start` で起動しているか確認してください。');
+      aiProbe = await probeAi();
+      refreshAiStatus(false);
+      throw new Error(aiProbe.state === 'file' ? 'ファイルを直接開いているため、AIサーバーに接続できません(上の案内を参照)。' : 'AIサーバーに接続できません(上の案内を参照)。');
     }
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.message || 'AI採点に失敗しました。');
+    if (!res.ok) throw new Error(data.message || (res.status === 404 ? 'AIサーバーではなく普通のWebサーバーで開いているようです。' : 'AI採点に失敗しました。'));
     return data;
+  }
+
+  function updateHistory(at, patch) {
+    const h = Store.history();
+    const e = h.find((x) => x.at === at);
+    if (e) { Object.assign(e, patch); Store.saveHistory(h); }
   }
 
   async function runAiReview(sc, minutes, formal, at) {
     $('ai-card').hidden = false;
     $('ai-badge').textContent = '';
-    $('ai-body').innerHTML = '<p class="spin">⏳ AIが議事録を確認しています…(10〜30秒ほど)</p>';
+    $('ai-body').innerHTML = '<p class="spin">AIが議事録を確認しています…(10〜30秒ほど)</p>';
     try {
       const ai = await postJson('/api/review', { scenarioId: sc.id, minutes });
       if (sc !== scenario || at !== historyAt) return; // 画面が切り替わっていたら反映しない
@@ -273,12 +417,11 @@
         <ul class="ai-items">${ai.items.map((i) =>
           `<li><span>${esc(i.label)}<br><small class="hint">${esc(i.reason)}</small></span><span class="pt ${i.score > 0 ? 'pos' : i.score < 0 ? 'neg' : ''}">${i.score > 0 ? '+' : ''}${i.score}</span></li>`).join('')}</ul>
         <p><strong>AIボーナス合計: ${ai.bonus > 0 ? '+' : ''}${ai.bonus}点</strong></p>
-        ${ai.advice.length ? `<h3>アドバイス</h3><ul class="advice">${ai.advice.map((a) => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}`;
+        ${ai.advice.length ? `<h3>💡 アドバイス</h3><ul class="advice">${ai.advice.map((a) => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}`;
       $('res-final').hidden = false;
       $('res-final').innerHTML = `形式 ${formal.total} ${ai.bonus >= 0 ? '+' : '−'} AIボーナス ${Math.abs(ai.bonus)} = 最終 <strong>${final}点(${rankOf(final)})</strong>`;
-      $('res-rank').textContent = rankOf(final);
-      $('res-total').textContent = final;
       updateHistory(at, { total: final, rank: rankOf(final), ai: true, formal: formal.total, bonus: ai.bonus });
+      afterScoreUpdate(final, rankOf(final));
       renderRedPen(minutes, ai.redPen);
     } catch (e) {
       if (sc !== scenario || at !== historyAt) return;
@@ -322,7 +465,7 @@
       body.hidden = false;
       $('model-note').textContent = '台本に基づく標準の模範解答です。';
       $('btn-model').textContent = '閉じる';
-      $('btn-model-ai').hidden = false;
+      $('btn-model-ai').hidden = !(aiProbe && aiProbe.state === 'ok');
       return;
     }
     $('model-note').textContent = '⏳ AIが模範解答を作成中…';
@@ -336,15 +479,98 @@
     }
   }
 
+  // ---- 議事録テンプレート ----
+  function renderTplSelect(selectId) {
+    const sel = $('tpl-select');
+    const keep = selectId || sel.value || tplData.defaultId || 'builtin-standard';
+    const mine = tplData.items;
+    sel.innerHTML =
+      `<optgroup label="組み込み">${Templates.BUILTIN.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</optgroup>` +
+      `<optgroup label="マイテンプレート">${mine.length
+        ? mine.map((t) => `<option value="${t.id}">${esc(t.name)}${tplData.defaultId === t.id ? ' ★既定' : ''}</option>`).join('')
+        : '<option disabled>(まだありません)</option>'}</optgroup>`;
+    sel.value = Templates.find(tplData, keep) ? keep : 'builtin-standard';
+  }
+
+  function insertTemplate(id) {
+    const t = Templates.find(tplData, id);
+    if (!t) return;
+    const ta = $('minutes');
+    const r = Templates.insertInto(ta.value, t.body, ta.selectionStart);
+    ta.value = r.text;
+    ta.focus();
+    ta.setSelectionRange(r.caret, r.caret);
+    updateCount();
+  }
+
+  function renderTplList() {
+    const row = (t) =>
+      `<button type="button" class="tpl-item ${t.id === tplEditingId ? 'sel' : ''}" data-id="${t.id}"><span>${esc(t.name)}</span>${tplData.defaultId === t.id ? '<small>★既定</small>' : ''}</button>`;
+    $('tpl-list').innerHTML =
+      '<h4>組み込み(変更不可)</h4>' + Templates.BUILTIN.map(row).join('') +
+      '<h4>マイテンプレート</h4>' + (tplData.items.length ? tplData.items.map(row).join('') : '<p class="hint">まだありません。右で作って保存できます。</p>');
+    $('tpl-list').querySelectorAll('.tpl-item').forEach((el) => el.addEventListener('click', () => loadTplEditor(el.dataset.id)));
+  }
+
+  function loadTplEditor(id, preset) {
+    tplEditingId = id;
+    const t = id ? Templates.find(tplData, id) : null;
+    const builtin = !!(t && t.builtin);
+    $('tpl-name').value = preset ? preset.name : t ? (builtin ? t.name + '(コピー)' : t.name) : '';
+    $('tpl-body').value = preset ? preset.body : t ? t.body : '';
+    $('tpl-default').checked = !!(t && !builtin && tplData.defaultId === t.id);
+    $('tpl-delete').disabled = !t || builtin;
+    $('tpl-note').textContent = builtin
+      ? '組み込みテンプレートは変更できません。保存すると、自分用のコピーとして追加されます。'
+      : t ? '内容を書き換えて「保存」で上書きできます。' : '名前と内容を入力して「保存」すると、マイテンプレートに追加されます。';
+    if (builtin) tplEditingId = null; // 保存は常に新規コピー
+    renderTplList();
+    if (builtin) $('tpl-list').querySelector(`[data-id="${id}"]`)?.classList.add('sel');
+  }
+
+  function openTplDialog(preset) {
+    tplData = Store.templates();
+    loadTplEditor(null, preset);
+    if (typeof $('tpl-dialog').showModal === 'function') $('tpl-dialog').showModal(); else $('tpl-dialog').setAttribute('open', '');
+  }
+
+  function saveTpl() {
+    const body = $('tpl-body').value;
+    if (!body.trim()) { alert('テンプレートの内容が空です。'); return; }
+    const r = Templates.save(tplData, { id: tplEditingId, name: $('tpl-name').value, body });
+    tplData = $('tpl-default').checked ? Templates.setDefault(r.data, r.id) : r.data.defaultId === r.id ? Templates.setDefault(r.data, null) : r.data;
+    if (!Store.saveTemplates(tplData)) { alert('保存できませんでした(ブラウザの保存領域が使えない可能性があります)。'); return; }
+    tplEditingId = r.id;
+    renderTplSelect(r.id);
+    loadTplEditor(r.id);
+    toast('💾 テンプレートを保存しました');
+  }
+
+  function deleteTpl() {
+    const t = tplEditingId && Templates.find(tplData, tplEditingId);
+    if (!t || t.builtin || !confirm(`「${t.name}」を削除しますか?`)) return;
+    tplData = Templates.remove(tplData, tplEditingId);
+    Store.saveTemplates(tplData);
+    renderTplSelect();
+    loadTplEditor(null);
+    toast('🗑 テンプレートを削除しました');
+  }
+
   // ---- イベント ----
   $('btn-play').addEventListener('click', play);
   $('btn-stop').addEventListener('click', () => { stopSpeech(); updatePlayUi(); $('now-speaking').textContent = '停止しました。'; setSubtitle(''); });
   $('opt-subtitle').addEventListener('change', () => { if (!speaking) setSubtitle(''); });
   $('btn-submit').addEventListener('click', submit);
-  $('btn-template').addEventListener('click', () => {
-    if (!$('minutes').value.trim() || confirm('入力中の内容を置き換えますか?')) { $('minutes').value = TEMPLATE; updateCount(); }
-  });
   $('minutes').addEventListener('input', updateCount);
+  $('btn-tpl-insert').addEventListener('click', () => insertTemplate($('tpl-select').value));
+  $('btn-tpl-manage').addEventListener('click', () => openTplDialog());
+  $('btn-tpl-save').addEventListener('click', () => {
+    const body = $('minutes').value;
+    openTplDialog(body.trim() ? { name: '', body } : null);
+  });
+  $('tpl-save').addEventListener('click', saveTpl);
+  $('tpl-delete').addEventListener('click', deleteTpl);
+  $('tpl-new').addEventListener('click', () => loadTplEditor(null));
   $('btn-back').addEventListener('click', () => { stopSpeech(); renderSelect(); show('select'); });
   $('btn-home').addEventListener('click', () => { historyAt = null; renderSelect(); show('select'); });
   $('btn-retry').addEventListener('click', () => start(scenario));
@@ -357,4 +583,6 @@
 
   renderSelect();
   show('select');
+  announceBadges();
+  refreshAiStatus(false);
 })();

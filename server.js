@@ -1,6 +1,8 @@
 // 静的ファイル配信 + AI採点API。APIキーはサーバー側の環境変数(ANTHROPIC_API_KEY)だけで使う。
 // 起動: npm start   (PMO_MOCK_AI=1 でAPIキー無しの動作確認)
 const http = require('node:http');
+const { loadEnvFile } = require('./lib/env.js');
+loadEnvFile(require('node:path').join(__dirname, '.env'));
 const fs = require('node:fs');
 const path = require('node:path');
 const { reviewMinutes, generateModelAnswer, AiError, MAX_MINUTES_CHARS } = require('./lib/ai-review.js');
@@ -41,7 +43,9 @@ function readJson(req) {
 }
 
 async function handleApi(req, res, pathname) {
-  if (req.method === 'GET' && pathname === '/api/status') return send(res, 200, { ai: !!getClient() });
+  if (req.method === 'GET' && pathname === '/api/status') {
+    return send(res, 200, { app: 'pmo-practice', ai: !!getClient(), mock: process.env.PMO_MOCK_AI === '1' });
+  }
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
   const c = getClient();
   if (!c) return send(res, 503, { error: 'no_key', message: 'AI採点は未設定です(サーバーに ANTHROPIC_API_KEY が必要です)。' });
@@ -59,7 +63,14 @@ async function handleApi(req, res, pathname) {
   } catch (e) {
     if (e instanceof AiError) return send(res, e.code === 'too_long' || e.code === 'too_large' ? 413 : 502, { error: e.code, message: e.message });
     console.error('[api error]', e && e.status, e && e.message);
-    return send(res, 502, { error: 'ai_failed', message: 'AI採点に失敗しました。時間をおいて再試行してください。' });
+    const status = e && e.status;
+    const message =
+      status === 401 || status === 403 ? 'APIキーが無効、または権限がありません。.env の ANTHROPIC_API_KEY を確認してください。'
+      : status === 404 ? `モデルが見つかりません(${process.env.PMO_AI_MODEL || '既定モデル'})。.env の PMO_AI_MODEL を確認してください。`
+      : status === 429 ? 'リクエストが多すぎます。少し待ってから再試行してください。'
+      : status === 400 ? 'APIが要求を受け付けませんでした(残高不足の可能性があります)。サーバーのログを確認してください。'
+      : 'AI採点に失敗しました。時間をおいて再試行してください。サーバーのログに詳細があります。';
+    return send(res, 502, { error: 'ai_failed', message });
   }
 }
 
@@ -75,8 +86,19 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
+  server.on('error', (e) => {
+    console.error(e.code === 'EADDRINUSE'
+      ? `\nポート ${PORT} は使用中です。前のサーバーを止めるか、PORT=8001 のように別のポートで起動してください。`
+      : e);
+    process.exit(1);
+  });
   server.listen(PORT, () => {
-    console.log(`http://localhost:${PORT}  (AI: ${getClient() ? 'on' : 'off - ANTHROPIC_API_KEY 未設定'}, 議事録上限 ${MAX_MINUTES_CHARS}文字)`);
+    console.log('');
+    console.log(`  議事録クエスト を起動しました → ブラウザで http://localhost:${PORT} を開いてください`);
+    console.log(getClient()
+      ? '  AI採点: 使えます'
+      : '  AI採点: 未設定(形式採点だけ使えます)。使うには .env に ANTHROPIC_API_KEY=... を書いて再起動してください');
+    console.log('');
   });
 }
 module.exports = { server };
