@@ -190,4 +190,5 @@ if (typeof module !== 'undefined') {
   module.exports = { SCENARIOS };
   require('./scenarios-beginner.js');
   require('./scenarios-intermediate.js');
+  require('./scenarios-fantasy.js');
 }

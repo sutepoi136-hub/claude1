@@ -6,8 +6,8 @@
   const KIND_LABEL = { error: '誤り', improve: '改善', missing: '抜け漏れ', good: '良い点' };
   const RANK_COLOR = { S: '#e09b00', A: '#e8590c', B: '#2f9e44', C: '#1c7ed6', D: '#868e96' };
   const LEVELS = [
-    { id: '初級', icon: '🌱', stars: 1, blurb: '話者3人・約1〜2分。決定・ToDo・保留の区別から練習しよう。' },
-    { id: '中級', icon: '🔥', stars: 2, blurb: '話者4〜5人・約3〜5分。言い直し・数字の訂正・遅れて入る人・保留など、実際の会議に近い内容。' },
+    { id: '初級', icon: '🌱', stars: 1, blurb: '話者3〜4人・約1〜2分。決定・ToDo・保留の区別から練習しよう。実務の会議に加え、ファンタジー(魔王軍編)も。' },
+    { id: '中級', icon: '🔥', stars: 2, blurb: '話者4〜5人・約3〜5分。言い直し・数字の訂正・遅れて入る人・保留など、実際の会議に近い内容。魔王軍編の続きもここ。' },
     { id: '上級', icon: '⚡', stars: 3, blurb: '炎上案件・関係者多数など、手ごわい会議。準備中です。', soon: true },
   ];
   const reducedMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -188,6 +188,7 @@
         : `<span class="medal" style="--rc:${RANK_COLOR[b.rank]}">${b.rank}</span> 自己ベスト ${b.total}点(あと${CLEAR_SCORE - b.total}点でクリア)`;
       return `<div class="stage"><div class="ico" aria-hidden="true">${sc.icon || '🎧'}</div>
         <div><div class="ttl">${esc(sc.title)}</div>
+        ${sc.series ? `<div><span class="badge" data-tip="物語が時系列で進むシリーズです。第1話から順に遊ぶと、戦いの流れを追えます。">⚔ ${esc(sc.series)} 第${sc.episode}話</span></div>` : ''}
         <div class="hint">${esc(sc.description)}</div>
         <div class="best">${status}</div></div>
         <button class="btn primary" data-id="${sc.id}">${b ? '再挑戦' : '挑戦する'}</button></div>`;

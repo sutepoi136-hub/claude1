@@ -4,8 +4,8 @@ const { SCENARIOS } = require('../js/scenarios.js');
 const { evaluate, TYPE_LABELS } = require('../js/scoring.js');
 
 test('シナリオ: 初級・中級が揃っている', () => {
-  assert.ok(SCENARIOS.filter((s) => s.level === '初級').length >= 4);
-  assert.ok(SCENARIOS.filter((s) => s.level === '中級').length >= 4);
+  assert.ok(SCENARIOS.filter((s) => s.level === '初級').length >= 6);
+  assert.ok(SCENARIOS.filter((s) => s.level === '中級').length >= 6);
 });
 
 test('シナリオ: ID重複なし・必須項目・話者の整合', () => {
@@ -65,4 +65,34 @@ test('シナリオ: 引っかけは「それらしい誤り」で反応する', 
   assert.ok(trapIds('migration-gonogo-1', '・残りの不具合は12件\n・切替日は11/28に決定\n・追加予算を承認').length === 3);
   assert.ok(trapIds('ad-review-1', '・クリック率は1.8%\n・動画広告の制作を決定').length === 2);
   assert.ok(trapIds('vendor-incident-1', '・障害は10時ごろ発生\n・費用負担はベンダーが負担することで合意').length === 2);
+});
+
+test('魔王軍編: シリーズ・話数が揃い、時系列(会議日)が話数順に進む', () => {
+  const maou = SCENARIOS.filter((s) => s.series === '魔王軍編').sort((a, b) => a.episode - b.episode);
+  assert.ok(maou.length >= 4);
+  assert.deepEqual(maou.map((s) => s.episode), maou.map((_, i) => i + 1), '話数は1から連番');
+  for (const s of SCENARIOS) assert.equal(!!s.series, s.episode !== undefined, `${s.id}: series と episode は両方つける`);
+  // 説明文の「会議日は◯/◯」が話数順に進む(物語の時系列が逆転しない)
+  const day = (s) => { const m = s.description.match(/会議日は(\d+)\/(\d+)/); assert.ok(m, s.id + ' 会議日'); return Number(m[1]) * 31 + Number(m[2]); };
+  for (let i = 1; i < maou.length; i++) assert.ok(day(maou[i]) > day(maou[i - 1]), `${maou[i].id} は前の話より後の日付`);
+});
+
+test('魔王軍編: 会議の形は実務と同じ(決定・ToDo・課題・次回の要点を持つ)', () => {
+  for (const s of SCENARIOS.filter((x) => x.series)) {
+    const types = new Set(s.keyPoints.map((p) => p.type));
+    for (const need of ['decision', 'todo', 'issue', 'next']) assert.ok(types.has(need), `${s.id} に ${need} が無い`);
+    assert.ok(/【決定事項】/.test(s.modelAnswer) && /【ToDo】/.test(s.modelAnswer));
+  }
+});
+
+test('魔王軍編: 引っかけは「それらしい誤り」で反応する', () => {
+  const by = Object.fromEntries(SCENARIOS.map((s) => [s.id, s]));
+  const ids = (id, text) => evaluate(by[id], text).triggered.map((t) => t.id).sort();
+  assert.deepEqual(ids('maou-kickoff-1', '・勇者の戦力が判明した'), ['trap-power']);
+  assert.deepEqual(ids('maou-trap-1', '・ドラゴンの配置を決定\n・罠の予算1000枚を承認'), ['trap-1000', 'trap-dragon']);
+  assert.deepEqual(ids('maou-supply-1', '・突破された罠は12個\n・魔界銀行の融資を承認'), ['trap-count', 'trap-loan']);
+  assert.deepEqual(ids('maou-decisive-1', '・損害は30人\n・勇者一行は4人\n・魔王の出陣を決定'), ['trap-king', 'trap-loss', 'trap-party']);
+  // 訂正を正しく書けていれば引っかからない
+  assert.deepEqual(ids('maou-supply-1', '・当初12個と報告されたが、訂正され21個が突破された'), []);
+  assert.deepEqual(ids('maou-decisive-1', '・勇者一行は仲間が増えて5人(当初は4人)\n・損害は当初30人と報告→50人に訂正'), []);
 });
