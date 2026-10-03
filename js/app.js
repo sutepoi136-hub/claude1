@@ -5,7 +5,7 @@
   const screens = ['select', 'play', 'result'];
   const KIND_LABEL = { error: '誤り', improve: '改善', missing: '抜け漏れ', good: '良い点' };
   const RANK_COLOR = { S: '#f59e0b', A: '#7c3aed', B: '#0d9488', C: '#2563eb', D: '#64748b' };
-  const STAGE_ICON = ['🌱', '🔥', '⚡'];
+  const LEVEL_ORDER = { 初級: 0, 中級: 1, 上級: 2 };
   const LEVEL_STARS = { 初級: 1, 中級: 2, 上級: 3 };
   const reducedMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -99,6 +99,7 @@
     let data;
     try { data = await res.json(); } catch (e) { return { state: 'static' }; }
     if (!data || data.app !== 'pmo-practice') return { state: 'static' };
+    if (data.reason === 'deps') return { state: 'deps' };
     return data.ai ? { state: 'ok', mock: data.mock } : { state: 'nokey' };
   }
 
@@ -106,6 +107,7 @@
   const DIAG = {
     ok: (p) => ({ cls: 'ok', html: `<b>🤖 AI採点: 使えます${p.mock ? '(ダミー応答モード)' : ''}</b>` }),
     nokey: () => ({ cls: 'warn', html: '<b>🔑 AIサーバーは動いていますが、APIキーが未設定です</b><ol><li>フォルダ内の <code>.env.example</code> を <code>.env</code> という名前にコピー</li><li><code>.env</code> を開き、<code>ANTHROPIC_API_KEY=</code> の右にAPIキーを書いて保存</li><li>黒い画面を閉じて <code>start.bat</code> をもう一度実行</li></ol><span class="hint">キーがなくても形式採点は遊べます。</span>' }),
+    deps: () => ({ cls: 'bad', html: '<b>📦 AI採点に必要なパッケージが入っていません</b><ol><li>黒い画面を閉じる</li><li><code>start.bat</code>(Mac は <code>bash start.sh</code>)をもう一度実行。初回は自動でインストールされます(インターネット接続が必要)</li></ol><span class="hint">それでも直らない場合は、フォルダで <code>npm install</code> を実行したときの表示を教えてください。</span>' }),
     down: () => ({ cls: 'bad', html: `<b>🔌 AIサーバーが起動していません</b>${START_STEPS}` }),
     static: () => ({ cls: 'bad', html: `<b>⚠ このページはAIサーバーではなく、普通のWebサーバーで開かれています</b><span class="hint">(python の http.server などで起動していませんか?)</span>${START_STEPS}` }),
     file: () => ({ cls: 'bad', html: `<b>⚠ ファイルを直接開いています(index.html のダブルクリック)</b><span class="hint">AI採点にはサーバーの起動が必要です。</span>${START_STEPS}` }),
@@ -132,10 +134,12 @@
     renderMe();
     const history = Store.history();
     const best = Game.bestByScenario(history);
-    $('scenario-list').innerHTML = SCENARIOS.map((s, i) => {
+    // 初級→中級の順(同じ難易度は登録順)に並べる
+    const ordered = SCENARIOS.map((s, i) => [s, i]).sort((x, y) => (LEVEL_ORDER[x[0].level] ?? 9) - (LEVEL_ORDER[y[0].level] ?? 9) || x[1] - y[1]).map((x) => x[0]);
+    $('scenario-list').innerHTML = ordered.map((s) => {
       const stars = LEVEL_STARS[s.level] || 1;
       const b = best[s.id];
-      return `<div class="stage"><div class="ico" aria-hidden="true">${STAGE_ICON[i % STAGE_ICON.length]}</div>
+      return `<div class="stage"><div class="ico" aria-hidden="true">${s.icon || '🎧'}</div>
         <div><div class="ttl">${esc(s.title)}</div>
         <div class="stars" aria-label="難易度 ${esc(s.level)}">${'★'.repeat(stars)}<s>${'★'.repeat(3 - stars)}</s> <span class="badge">${esc(s.level)}</span></div>
         <div class="hint">${esc(s.description)}</div>

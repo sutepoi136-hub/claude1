@@ -1,6 +1,6 @@
 // 議事録の採点(MVP: キーワード判定)。
 // 将来LLM採点に差し替える場合は、同じ形の戻り値を返す evaluate() を用意すればUI側は変更不要。
-const TYPE_LABELS = { decision: '決定事項', todo: 'ToDo', issue: '課題・懸念', next: '次回予定' };
+const TYPE_LABELS = { decision: '決定事項', todo: 'ToDo', issue: '課題・懸念', info: '共有事項', next: '次回予定' };
 
 function normalize(text) {
   // 全角英数を半角にし、大文字小文字を無視して比較する

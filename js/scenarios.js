@@ -4,6 +4,7 @@
 const SCENARIOS = [
   {
     id: 'web-renewal-1',
+    icon: '🌐',
     title: 'Webサイトリニューアル 定例会議',
     level: '初級',
     description: 'デザイン確認・スケジュール・フォーム仕様の3議題。決まったことと持ち越しを区別しよう。',
@@ -73,6 +74,7 @@ const SCENARIOS = [
 
   {
     id: 'lp-campaign-1',
+    icon: '🎯',
     title: 'キャンペーンLP制作 定例(リアル版)',
     level: '中級',
     description: 'フィラー・言い直し・聞き直し・遅刻者の合流つき。訂正された数字や、保留と決定の違いに注意。会議日は10/8(木)。',
@@ -183,4 +185,9 @@ const SCENARIOS = [
   },
 ];
 
-if (typeof module !== 'undefined') module.exports = { SCENARIOS };
+// 初級・中級シナリオは別ファイル(ブラウザでは index.html が読み込み、Node ではここで読み込む)
+if (typeof module !== 'undefined') {
+  module.exports = { SCENARIOS };
+  require('./scenarios-beginner.js');
+  require('./scenarios-intermediate.js');
+}

@@ -5,7 +5,20 @@ const { loadEnvFile } = require('./lib/env.js');
 loadEnvFile(require('node:path').join(__dirname, '.env'));
 const fs = require('node:fs');
 const path = require('node:path');
-const { reviewMinutes, generateModelAnswer, AiError, MAX_MINUTES_CHARS } = require('./lib/ai-review.js');
+// 必要なパッケージ(npm install)が無くてもサーバーは起動し、画面に原因を表示できるようにする
+let ai = null;
+let depsError = null;
+try {
+  ai = require('./lib/ai-review.js');
+} catch (e) {
+  if (e && e.code === 'MODULE_NOT_FOUND') {
+    depsError = e;
+    console.error('\n[警告] 必要なパッケージが見つかりません: ' + (e.message || '').split('\n')[0]);
+    console.error('       フォルダで  npm install  を実行するか、start.bat(Mac は bash start.sh)から起動してください。\n');
+  } else throw e;
+}
+const AiError = ai ? ai.AiError : class AiError extends Error {};
+const MAX_MINUTES_CHARS = ai ? ai.MAX_MINUTES_CHARS : 5000;
 const { SCENARIOS } = require('./js/scenarios.js');
 
 const PORT = Number(process.env.PORT || 8000);
@@ -15,6 +28,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=
 
 let client = null;
 function getClient() {
+  if (depsError) return null;
   if (client) return client;
   if (process.env.PMO_MOCK_AI === '1') return (client = require('./lib/mock-client.js').mockClient());
   if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) return null;
@@ -44,9 +58,10 @@ function readJson(req) {
 
 async function handleApi(req, res, pathname) {
   if (req.method === 'GET' && pathname === '/api/status') {
-    return send(res, 200, { app: 'pmo-practice', ai: !!getClient(), mock: process.env.PMO_MOCK_AI === '1' });
+    return send(res, 200, { app: 'pmo-practice', ai: !!getClient(), mock: process.env.PMO_MOCK_AI === '1', reason: depsError ? 'deps' : undefined });
   }
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
+  if (depsError) return send(res, 503, { error: 'deps', message: '必要なパッケージが入っていません。npm install を実行してください。' });
   const c = getClient();
   if (!c) return send(res, 503, { error: 'no_key', message: 'AI採点は未設定です(サーバーに ANTHROPIC_API_KEY が必要です)。' });
   try {
@@ -56,9 +71,9 @@ async function handleApi(req, res, pathname) {
     if (pathname === '/api/review') {
       const minutes = typeof body.minutes === 'string' ? body.minutes.trim() : '';
       if (minutes.length < 20) return send(res, 400, { error: 'too_short', message: '議事録が短すぎます。' });
-      return send(res, 200, await reviewMinutes({ client: c, scenario, minutes }));
+      return send(res, 200, await ai.reviewMinutes({ client: c, scenario, minutes }));
     }
-    if (pathname === '/api/model-answer') return send(res, 200, await generateModelAnswer({ client: c, scenario }));
+    if (pathname === '/api/model-answer') return send(res, 200, await ai.generateModelAnswer({ client: c, scenario }));
     return send(res, 404, { error: 'not_found' });
   } catch (e) {
     if (e instanceof AiError) return send(res, e.code === 'too_long' || e.code === 'too_large' ? 413 : 502, { error: e.code, message: e.message });
@@ -95,7 +110,9 @@ if (require.main === module) {
   server.listen(PORT, () => {
     console.log('');
     console.log(`  議事録クエスト を起動しました → ブラウザで http://localhost:${PORT} を開いてください`);
-    console.log(getClient()
+    console.log(depsError
+      ? '  AI採点: 使えません(パッケージ未インストール。npm install を実行してください)'
+      : getClient()
       ? '  AI採点: 使えます'
       : '  AI採点: 未設定(形式採点だけ使えます)。使うには .env に ANTHROPIC_API_KEY=... を書いて再起動してください');
     console.log('');
