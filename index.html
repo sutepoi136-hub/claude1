@@ -8,19 +8,20 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📝%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Shippori+Mincho+B1:wght@600;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Shippori+Mincho+B1:wght@600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <header class="top">
-    <button type="button" class="brand" data-action="home" aria-label="ホームへ">
-      <span class="logo" aria-hidden="true">📝</span>
-      <span><b>議事録クエスト</b><small>聞いて、書いて、会議を制す</small></span>
-    </button>
-    <div class="top-right">
-      <div class="me" id="me" aria-label="あなたの成績"></div>
-      <button type="button" class="icon-btn" data-action="settings" data-tip="名前・話す速さ・効果音などの設定">⚙ 設定</button>
-      <button type="button" class="icon-btn" data-help="howto" data-tip="遊び方・採点・XPなどのルール">❓ ルール</button>
+    <div class="top-in">
+      <button type="button" class="brand" data-action="home" aria-label="ホームへ">
+        <span class="mark" aria-hidden="true">議</span><b>議事録クエスト</b>
+      </button>
+      <nav class="top-nav" aria-label="メニュー">
+        <div class="me" id="me" aria-label="あなたの成績"></div>
+        <button type="button" class="nav-btn" data-help="howto" id="nav-help"></button>
+        <button type="button" class="nav-btn" data-action="settings" id="nav-settings"></button>
+      </nav>
     </div>
   </header>
 
@@ -31,45 +32,47 @@
     <section id="view-result" class="view" aria-label="結果" hidden></section>
   </main>
 
-  <!-- ルール説明 -->
+  <!-- ルール -->
   <dialog id="dlg-help" aria-labelledby="dlg-help-title">
-    <form method="dialog" class="dlg-head"><h3 id="dlg-help-title">📖 ゲームのルール</h3><button class="btn small" aria-label="閉じる">✕</button></form>
+    <form method="dialog" class="dlg-head"><h3 id="dlg-help-title">遊び方とルール</h3><button class="btn ghost icon x" aria-label="閉じる" data-icon="x"></button></form>
     <div class="dlg-body" id="help-body"></div>
   </dialog>
 
-  <!-- 物語(プロローグ・その後・登場人物) -->
+  <!-- 物語(プロローグ・その後) -->
   <dialog id="dlg-story" aria-labelledby="dlg-story-title">
-    <form method="dialog" class="dlg-head"><h3 id="dlg-story-title"></h3><button class="btn small" aria-label="閉じる">✕</button></form>
+    <form method="dialog" class="dlg-head"><h3 id="dlg-story-title"></h3><button class="btn ghost icon x" aria-label="閉じる" data-icon="x"></button></form>
     <div class="dlg-body" id="story-body"></div>
     <div class="dlg-foot" id="story-foot"></div>
   </dialog>
 
   <!-- 設定 -->
   <dialog id="dlg-settings" aria-labelledby="dlg-settings-title">
-    <form method="dialog" class="dlg-head"><h3 id="dlg-settings-title">⚙ 設定</h3><button class="btn small" aria-label="閉じる">✕</button></form>
+    <form method="dialog" class="dlg-head"><h3 id="dlg-settings-title">設定</h3><button class="btn ghost icon x" aria-label="閉じる" data-icon="x"></button></form>
     <div class="dlg-body" id="settings-body"></div>
   </dialog>
 
   <!-- はじめに(初回だけ) -->
   <dialog id="dlg-welcome" aria-labelledby="dlg-welcome-title">
-    <div class="dlg-head"><h3 id="dlg-welcome-title">📝 議事録クエストへようこそ</h3></div>
+    <div class="dlg-head"><span class="mark" aria-hidden="true">議</span><h3 id="dlg-welcome-title">議事録クエストへようこそ</h3></div>
     <div class="dlg-body" id="welcome-body"></div>
-    <div class="dlg-foot"><button type="button" class="btn primary big" id="welcome-start">はじめる</button></div>
+    <div class="dlg-foot"><button type="button" class="btn primary lg" id="welcome-start">はじめる</button></div>
   </dialog>
 
-  <!-- テンプレート管理 -->
+  <!-- テンプレート -->
   <dialog id="dlg-tpl" aria-labelledby="dlg-tpl-title">
-    <form method="dialog" class="dlg-head"><h3 id="dlg-tpl-title">📓 議事録テンプレート</h3><button class="btn small" aria-label="閉じる">✕</button></form>
+    <form method="dialog" class="dlg-head"><h3 id="dlg-tpl-title">議事録テンプレート</h3><button class="btn ghost icon x" aria-label="閉じる" data-icon="x"></button></form>
     <div class="dlg-body dlg-split">
       <div id="tpl-list" class="tpl-list"></div>
       <div>
         <div class="field"><label for="tpl-name">テンプレート名</label><input id="tpl-name" type="text" maxlength="40" placeholder="例: 定例会議用"></div>
         <div class="field"><label for="tpl-body">内容</label><textarea id="tpl-body" rows="11" placeholder="【決定事項】&#10;・"></textarea></div>
-        <label class="opt"><input type="checkbox" id="tpl-default"> 新しい会議を始めるとき、自動で議事録に入れる</label>
+        <label class="check"><input type="checkbox" id="tpl-default"> 新しい会議を始めるとき、自動で議事録に入れる</label>
         <p class="hint" id="tpl-note"></p>
-        <div class="row">
-          <button type="button" id="tpl-delete" class="btn small danger">削除</button>
-          <span class="btns"><button type="button" id="tpl-new" class="btn small">新規</button><button type="button" id="tpl-save" class="btn primary">保存</button></span>
+        <div class="btns" style="margin-top:14px">
+          <button type="button" id="tpl-delete" class="btn sm danger">削除</button>
+          <span style="flex:1"></span>
+          <button type="button" id="tpl-new" class="btn sm">新規</button>
+          <button type="button" id="tpl-save" class="btn sm primary">保存</button>
         </div>
       </div>
     </div>
@@ -104,6 +107,7 @@
   <script src="js/data/maou/ep11.js"></script>
   <script src="js/data/maou/ep12.js"></script>
   <!-- 画面 -->
+  <script src="js/ui/icons.js"></script>
   <script src="js/ui/help.js"></script>
   <script src="js/ui/speech.js"></script>
   <script src="js/ui/sfx.js"></script>
