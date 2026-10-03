@@ -40,6 +40,8 @@
     candle: '<path d="M9 10h6v11H9z"/><path d="M12 10V7.5"/><path d="M12 2.8c1.3 1.6 1.8 2.6 0 4.2-1.8-1.6-1.3-2.6 0-4.2z"/>',
     message: '<path d="M4 5h16v11H9l-5 4z"/>',
     sound: '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 9a4 4 0 0 1 0 6M19 6.5a7.5 7.5 0 0 1 0 11"/>',
+    mute: '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9.5l5 5M22 9.5l-5 5"/>',
+    music: '<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
     door: '<path d="M6 21V4h10v17M4 21h16"/><path d="M13 12.5h.01" stroke-width="2.6"/>',
   };
   function icon(name, cls) {

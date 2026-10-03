@@ -38,6 +38,20 @@ test('保存: 設定の既定値、下書き、記録のリセット', () => {
   assert.equal(s.settings().playerName, '佐々木');
 });
 
+test('保存: 音の設定の既定値と、旧い「効果音オフ」の引き継ぎ', () => {
+  const s = Store.make(Store.memory());
+  assert.equal(s.settings().bgmVol, 50);
+  assert.equal(s.settings().sfxVol, 70);
+  assert.equal(s.settings().ambience, true);
+  assert.equal(s.settings().muted, false);
+  const mem = Store.memory();
+  mem.setItem('gq2-settings', JSON.stringify({ playerName: 'A', sfx: false }));
+  const old = Store.make(mem).settings();
+  assert.equal(old.sfxVol, 0);
+  assert.equal(old.bgmVol, 50);
+  assert.equal('sfx' in old, false);
+});
+
 test('保存: 旧版(v1)のマイテンプレートを引き継ぐ', () => {
   const mem = Store.memory();
   mem.setItem('pmo-minutes-templates-v1', JSON.stringify({ items: [{ id: 'my-1', name: '旧テンプレ', body: '【決定】' }], defaultId: 'my-1' }));

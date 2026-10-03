@@ -76,7 +76,15 @@
     stories: 'gq2-stories-read',
     oldTemplates: 'pmo-minutes-templates-v1', // 旧版(議事録クエスト v1)のテンプレート
   };
-  const DEFAULT_SETTINGS = { playerName: '皆川', playerReading: 'みながわ', rate: 1, sfx: true, unlockAll: false, welcomed: false };
+  // 音量は 0〜100。bgmVol=BGM、sfxVol=効果音、ambience=会議中の環境音、muted=すべて消音
+  const DEFAULT_SETTINGS = { playerName: '皆川', playerReading: 'みながわ', rate: 1, bgmVol: 50, sfxVol: 70, ambience: true, muted: false, unlockAll: false, welcomed: false };
+  // 旧い設定(効果音のオン/オフだけ)を、音量の設定に読み替える
+  function migrateSettings(saved) {
+    const s = { ...saved };
+    if (s.sfx === false && s.sfxVol == null) s.sfxVol = 0;
+    delete s.sfx;
+    return s;
+  }
 
   function make(storage) {
     const read = (key, fallback) => {
@@ -87,7 +95,7 @@
     return {
       history: () => { const h = read(K.history, []); return Array.isArray(h) ? h : []; },
       saveHistory: (h) => write(K.history, h.slice(-300)),
-      settings: () => ({ ...DEFAULT_SETTINGS, ...read(K.settings, {}) }),
+      settings: () => ({ ...DEFAULT_SETTINGS, ...migrateSettings(read(K.settings, {})) }),
       saveSettings: (s) => write(K.settings, s),
       // 旧版で作ったマイテンプレートがあれば、初回だけ引き継ぐ
       templates: () => {

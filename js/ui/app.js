@@ -3,7 +3,7 @@
 (function (root) {
   'use strict';
   const GQ = root.GQ;
-  const { Data, Scorer, Game, Store, Templates, Speech, Sfx, Help } = GQ;
+  const { Data, Scorer, Game, Store, Templates, Speech, Sfx, Bgm, Help } = GQ;
   const { icon, EMBLEM } = GQ.Icon;
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -22,14 +22,23 @@
 
   // ---------------------------------------------------------------- 設定・プレイヤー
   let settings = Store.settings();
-  Sfx.setEnabled(settings.sfx);
+  const applySound = () => GQ.Audio.setVolumes({ bgm: settings.bgmVol / 100, sfx: settings.sfxVol / 100, amb: settings.ambience, muted: settings.muted });
+  applySound();
   const player = () => ({ name: (settings.playerName || '').trim() || 'あなた', reading: (settings.playerReading || '').trim() || (settings.playerName || '').trim() || 'あなた' });
   const ctx = () => ({ player: player() });
   const fill = (text) => Data.fill(text, player());
   function saveSettings(patch) {
     settings = { ...settings, ...patch };
     Store.saveSettings(settings);
-    Sfx.setEnabled(settings.sfx);
+    applySound();
+    renderSoundBtn();
+  }
+  function renderSoundBtn() {
+    const b = $('nav-sound');
+    b.innerHTML = `${icon(settings.muted ? 'mute' : 'sound')}<span>${settings.muted ? '消音中' : '音'}</span>`;
+    b.setAttribute('aria-pressed', String(!!settings.muted));
+    b.setAttribute('aria-label', settings.muted ? '音を出す' : '音を消す');
+    b.dataset.tip = settings.muted ? '音を出す(BGM・効果音)' : 'すべての音を消す(会議の音声は消えません)';
   }
 
   // ---------------------------------------------------------------- 汎用
@@ -94,6 +103,7 @@
       `<button type="button" class="lv" data-help="xp" data-tip="${esc(`あと${lv.next - lv.xp} XPで Lv.${lv.level + 1}`)}"><span class="t"><span>Lv.${lv.level} ${esc(lv.title)}</span><span class="num">${lv.xp - lv.floor} / ${lv.next - lv.floor}</span></span><span class="meter"><i style="width:${lv.pct}%"></i></span></button>` +
       `<button type="button" class="streak" data-help="streak" data-tip="連続プレイ日数">${icon('flame')}<span class="num">${streak}日</span></button>`;
   }
+  renderSoundBtn();
   $('nav-help').innerHTML = `${icon('help')}<span>ルール</span>`;
   $('nav-settings').innerHTML = `${icon('sliders')}<span>設定</span>`;
   document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
@@ -240,6 +250,7 @@
       <div class="sec-head"><h2>バッジ</h2><span class="muted num">${earned.size} / ${Game.BADGES.length}</span><button type="button" class="help" data-help="badges">${icon('help')}条件</button></div>
       <div class="badges">${Game.BADGES.map((b) => `<div class="bd ${earned.has(b.id) ? 'earned' : 'locked'}"><span class="ic">${icon(earned.has(b.id) ? BADGE_ICON[b.id] || 'star' : 'lock')}</span><div><b>${esc(b.name)}</b><small>${esc(b.desc)}</small></div></div>`).join('')}</div>`;
     show('home');
+    Bgm.play('home');
   }
 
   // ---------------------------------------------------------------- 目次(シリーズ)
@@ -308,6 +319,7 @@
         </aside>
       </div>`;
     show('series');
+    Bgm.play(Bgm.trackFor(id));
   }
 
   // ---------------------------------------------------------------- 会議
@@ -337,6 +349,7 @@
     Speech.stopAll();
     clearInterval(clockTimer);
     saveDraftNow();
+    Bgm.ambience(null);
     session = null;
   }
 
@@ -439,6 +452,8 @@
     updatePlays();
     wirePlay();
     show('play');
+    Bgm.play(Bgm.trackFor(ep.series, ep));
+    Bgm.ambience(null);
     Speech.ready().then(() => { if (session && session.ep === ep) updateVoiceNote(); });
     updateVoiceNote();
   }
@@ -529,11 +544,11 @@
         const seat = document.querySelector(`#seats .seat[data-name="${CSS.escape(name)}"]`);
         if (kind === '@join') {
           if (seat) seat.classList.remove('away');
-          Sfx.play(s.theme === 'maou' ? 'door' : 'join');
+          Sfx.play('join', s.theme);
           setCaption(null, s.theme === 'maou' ? `——${name}が入室しました——` : `——${name}さんが会議に参加しました——`);
         } else if (kind === '@leave') {
           if (seat) seat.classList.add('away');
-          Sfx.play(s.theme === 'maou' ? 'door' : 'leave');
+          Sfx.play('leave', s.theme);
           setCaption(null, s.theme === 'maou' ? `——${name}が退室しました——` : `——${name}さんが退出しました——`);
         }
       },
@@ -542,13 +557,16 @@
         setSpeaker(null);
         markTimeline(ep.script.length);
         session.endedAt = Date.now();
-        Sfx.play('end');
+        Sfx.play('end', s.theme);
         setCaption(null, session.playsLeft > 0 ? '会議が終わりました。議事録をまとめて提出しましょう(もう一度聞くこともできます)。' : '会議が終わりました。議事録をまとめて提出しましょう。');
         updatePlays();
         saveDraftNow();
       },
     });
-    Sfx.play('start');
+    // 会議中は曲を止め、部屋の環境音だけにする(聞き取りの邪魔をしない)
+    Bgm.play(null, { fade: 1 });
+    Bgm.ambience(s.theme);
+    Sfx.play('start', s.theme);
     setCaption(null, textOnly ? '字幕モードで会議を始めます……' : '会議を始めます……');
     session.speech.play();
     clearInterval(clockTimer);
@@ -620,8 +638,8 @@
     });
     $('minutes').addEventListener('input', () => { updateCount(); scheduleSave(); });
     $('memo').addEventListener('input', scheduleSave);
-    document.querySelectorAll('.nb-tab').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
-    $('btn-tpl-insert').addEventListener('click', () => insertTemplate($('tpl-select').value));
+    document.querySelectorAll('.nb-tab').forEach((b) => b.addEventListener('click', () => { Sfx.play('tick'); setTab(b.dataset.tab); }));
+    $('btn-tpl-insert').addEventListener('click', () => { Sfx.play('pen'); insertTemplate($('tpl-select').value); });
     $('btn-tpl-manage').addEventListener('click', () => openTplDialog());
     $('btn-tpl-save').addEventListener('click', () => { const body = $('minutes').value; openTplDialog(body.trim() ? { name: '', body } : null); });
     $('btn-clear').addEventListener('click', () => {
@@ -646,6 +664,7 @@
     const { ep } = session;
     if (session.speech) session.speech.stop();
     clearInterval(clockTimer);
+    Bgm.ambience(null);
 
     const r = Scorer.evaluate(ep, text, ctx());
     const before = Store.history();
@@ -822,20 +841,26 @@
         </div>
         ${nextOpen ? `<button type="button" class="btn primary lg" data-action="play" data-id="${R.nextEp.id}">第${R.nextEp.no}話へ進む ${icon('right')}</button>` : `<button type="button" class="btn primary" data-action="series" data-id="${s.id}">${esc(s.name)}の目次へ</button>`}
       </div>`;
-    document.querySelectorAll('[data-rtab]').forEach((b) => b.addEventListener('click', () => setResultTab(b.dataset.rtab)));
+    document.querySelectorAll('[data-rtab]').forEach((b) => b.addEventListener('click', () => { Sfx.play('tick'); setResultTab(b.dataset.rtab); }));
     show('result');
 
     countUp($('res-total'), r.total);
-    if (R.shown) return;
+    const track = Bgm.trackFor(ep.series, ep);
+    if (R.shown) { Bgm.play(track); return; }
     R.shown = true;
     const stampEl = document.querySelector('.report-head .seal');
     if (stampEl && !reducedMotion) stampEl.classList.add('pop');
+    // 朱印 → 物語ごとのファンファーレ → ごほうびの音 → 曲が戻る
+    Bgm.play(null, { fade: 0.6 });
     Sfx.play('stamp');
-    effectTimers.push(setTimeout(() => Sfx.play(pass ? 'good' : 'meh'), 450));
+    effectTimers.push(setTimeout(() => Sfx.play(r.rank === 'S' ? 'great' : pass ? 'good' : 'meh', s.theme), 450));
     if (r.rank === 'S' || R.firstClear || R.isBest) confetti(r.rank === 'S' ? 90 : 50);
-    if (R.lvAfter.level > R.lvBefore.level) effectTimers.push(setTimeout(() => Sfx.play('levelup'), 900));
-    if (R.unlocked) effectTimers.push(setTimeout(() => Sfx.play('unlock'), 1500));
-    if (R.newBadges.length) effectTimers.push(setTimeout(() => Sfx.play('badge'), 2000));
+    const extra = [];
+    if (R.lvAfter.level > R.lvBefore.level) extra.push('levelup');
+    if (R.unlocked) extra.push('unlock');
+    if (R.newBadges.length) extra.push('badge');
+    extra.forEach((name, i) => effectTimers.push(setTimeout(() => Sfx.play(name), 2300 + i * 700)));
+    Bgm.play(track, { delay: 3.5 + extra.length * 0.7, fade: 4 });
   }
   // 結果画面の遅れて鳴る演出は、画面を離れたら取り消す
   const effectTimers = [];
@@ -915,8 +940,15 @@
       <div class="set-group"><h4>プレイヤー</h4>${nameFields('st')}</div>
       <div class="set-group"><h4>会議</h4>
         <div class="field"><label for="st-rate">話す速さ</label><select id="st-rate">${[0.8, 0.9, 1, 1.1, 1.25, 1.4].map((r) => `<option value="${r}" ${Number(settings.rate) === r ? 'selected' : ''}>${r}倍速</option>`).join('')}</select></div>
-        <label class="check"><input type="checkbox" id="st-sfx" ${settings.sfx ? 'checked' : ''}><span>効果音を鳴らす</span></label>
         <label class="check"><input type="checkbox" id="st-unlock" ${settings.unlockAll ? 'checked' : ''}><span>すべての話を解放する<br><small class="hint">順番に関係なく遊べます</small></span></label>
+      </div>
+      <div class="set-group"><h4>BGM・効果音</h4>
+        ${GQ.Audio.supported ? `
+        <div class="field range"><label for="st-bgm">${icon('music')}BGM<output id="st-bgm-v">${settings.bgmVol}</output></label><input type="range" id="st-bgm" min="0" max="100" step="5" value="${settings.bgmVol}"></div>
+        <div class="field range"><label for="st-sfxv">${icon('sound')}効果音<output id="st-sfxv-v">${settings.sfxVol}</output></label><input type="range" id="st-sfxv" min="0" max="100" step="5" value="${settings.sfxVol}"></div>
+        <label class="check"><input type="checkbox" id="st-amb" ${settings.ambience ? 'checked' : ''}><span>会議中に部屋の環境音を流す<br><small class="hint">会議中はBGMを止め、空調やタイピング(魔王軍編は暖炉と風)の音だけを小さく流します</small></span></label>
+        <label class="check"><input type="checkbox" id="st-mute" ${settings.muted ? 'checked' : ''}><span>すべての音を消す<br><small class="hint">画面右上の${icon('sound')}でも切り替えられます。会議の音声は消えません</small></span></label>`
+        : '<p class="hint">このブラウザは効果音・BGMに対応していません。</p>'}
       </div>
       <div class="set-group"><h4>音声のチェック</h4>
         <p class="hint">${!Speech.supported ? 'このブラウザは音声読み上げに対応していません。' : vs.length ? `日本語の音声: ${vs.map((v) => esc(v.name)).join(' / ')}` : '日本語の音声が見つかりません(読み込み中の場合は、少し待って開き直してください)。'}</p>
@@ -934,7 +966,14 @@
     $('st-name').addEventListener('change', commitName);
     $('st-reading').addEventListener('change', commitName);
     $('st-rate').addEventListener('change', (e) => saveSettings({ rate: Number(e.target.value) || 1 }));
-    $('st-sfx').addEventListener('change', (e) => { saveSettings({ sfx: e.target.checked }); Sfx.play('click'); });
+    if (GQ.Audio.supported) {
+      [['st-bgm', 'bgmVol'], ['st-sfxv', 'sfxVol']].forEach(([id, key]) => {
+        $(id).addEventListener('input', (e) => { settings[key] = Number(e.target.value); $(id + '-v').textContent = e.target.value; applySound(); });
+        $(id).addEventListener('change', (e) => { saveSettings({ [key]: Number(e.target.value) }); if (key === 'sfxVol') Sfx.play('badge'); });
+      });
+      $('st-amb').addEventListener('change', (e) => saveSettings({ ambience: e.target.checked }));
+      $('st-mute').addEventListener('change', (e) => saveSettings({ muted: e.target.checked }));
+    }
     $('st-unlock').addEventListener('change', (e) => { saveSettings({ unlockAll: e.target.checked }); if (currentView === 'home' || currentView === 'series') route(); });
     const tryVoice = (sid, who, text) => {
       const s = Data.series[sid];
@@ -961,7 +1000,7 @@
     $('welcome-start').onclick = () => {
       saveSettings({ playerName: $('wl-name').value.trim() || '皆川', playerReading: $('wl-reading').value.trim() || ($('wl-name').value.trim() ? '' : 'みながわ'), welcomed: true });
       $('dlg-welcome').close();
-      Sfx.play('start');
+      Sfx.play('open');
       if (currentView !== 'play') route();
     };
     openDialog('dlg-welcome');
@@ -1084,7 +1123,9 @@
     if (!a) { if (!(e.target.closest && e.target.closest('[data-tip]'))) tip.hide(); return; }
     const id = a.dataset.id;
     const dlg = a.closest('dialog');
+    if (a.dataset.action !== 'mute' && a.dataset.action !== 'story' && a.dataset.action !== 'prologue') Sfx.play(a.dataset.action === 'play' ? 'page' : 'tick');
     switch (a.dataset.action) {
+      case 'mute': saveSettings({ muted: !settings.muted }); if (!settings.muted) Sfx.play('tick'); break;
       case 'home': go('#/'); break;
       case 'series': go('#/s/' + id); break;
       case 'play': if (dlg) dlg.close(); go('#/p/' + id); break;
