@@ -13,6 +13,10 @@ function hit(point, text) {
   return point.all.every((group) => group.some((kw) => text.includes(normalize(kw))));
 }
 
+function rankOf(total) {
+  return total >= 90 ? 'S' : total >= 75 ? 'A' : total >= 60 ? 'B' : total >= 40 ? 'C' : 'D';
+}
+
 function evaluate(scenario, minutes) {
   const text = normalize(minutes);
 
@@ -39,7 +43,7 @@ function evaluate(scenario, minutes) {
   const total = coverage + structure + accuracy;
   return {
     total,
-    rank: total >= 90 ? 'S' : total >= 75 ? 'A' : total >= 60 ? 'B' : total >= 40 ? 'C' : 'D',
+    rank: rankOf(total),
     breakdown: { coverage, structure, accuracy },
     results,
     triggered,
@@ -48,4 +52,4 @@ function evaluate(scenario, minutes) {
   };
 }
 
-if (typeof module !== 'undefined') module.exports = { evaluate, TYPE_LABELS };
+if (typeof module !== 'undefined') module.exports = { evaluate, rankOf, TYPE_LABELS };

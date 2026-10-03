@@ -30,7 +30,11 @@
           <span id="play-status"></span>
         </div>
         <p class="hint">再生は<strong id="plays-left"></strong>回まで。聞きながらメモを取り、議事録にまとめましょう。</p>
+        <div id="cast" class="cast" aria-label="会議の参加者"></div>
         <div id="now-speaking" aria-live="polite"></div>
+        <div id="subtitle" class="subtitle" hidden></div>
+        <label class="opt"><input type="checkbox" id="opt-subtitle"> 字幕を表示する(難易度が下がります)</label>
+        <p class="hint" id="voice-info"></p>
       </div>
 
       <div class="card">
@@ -43,7 +47,8 @@
       </div>
       <div class="row">
         <button id="btn-back">← 戻る</button>
-        <button id="btn-submit" class="primary">採点する</button>
+        <span class="opt-wrap"><label class="opt"><input type="checkbox" id="opt-ai" checked> AI採点も使う</label>
+        <button id="btn-submit" class="primary">採点する</button></span>
       </div>
     </section>
 
@@ -54,6 +59,22 @@
         <div class="rank" id="res-rank"></div>
         <div class="total"><span id="res-total"></span><small> / 100</small></div>
         <ul class="breakdown" id="res-breakdown"></ul>
+        <div id="res-final" class="final" hidden></div>
+      </div>
+      <div class="card" id="ai-card" hidden>
+        <h3>AIによる評価 <span class="badge" id="ai-badge"></span></h3>
+        <div id="ai-body"></div>
+      </div>
+      <div class="card" id="redpen-card" hidden>
+        <h3>赤ペン添削</h3>
+        <div id="redpen-text" class="redpen-text"></div>
+        <ol id="redpen-list" class="redpen-list"></ol>
+      </div>
+      <div class="card">
+        <h3>模範解答</h3>
+        <div class="row"><span class="hint" id="model-note">答え合わせ用の議事録です。</span>
+          <span><button id="btn-model">模範解答を見る</button> <button id="btn-model-ai" hidden>AIで作り直す</button></span></div>
+        <pre id="model-body" class="model" hidden></pre>
       </div>
       <div class="card"><h3>要点のチェック</h3><ul id="res-points" class="points"></ul></div>
       <div class="card" id="res-warn" hidden></div>
