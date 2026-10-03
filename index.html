@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PMO練習 議事録ゲーム</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <h1>PMO練習 <span>議事録ゲーム</span></h1>
+  </header>
+
+  <main>
+    <!-- 1. シナリオ選択 -->
+    <section id="screen-select">
+      <h2>シナリオを選ぶ</h2>
+      <div id="scenario-list"></div>
+      <h2>これまでの記録</h2>
+      <div id="history"></div>
+    </section>
+
+    <!-- 2. 会議 + 議事録入力 -->
+    <section id="screen-play" hidden>
+      <h2 id="play-title"></h2>
+      <div class="card">
+        <div class="player">
+          <button id="btn-play" class="primary">▶ 会議音声を再生</button>
+          <button id="btn-stop">■ 停止</button>
+          <span id="play-status"></span>
+        </div>
+        <p class="hint">再生は<strong id="plays-left"></strong>回まで。聞きながらメモを取り、議事録にまとめましょう。</p>
+        <div id="now-speaking" aria-live="polite"></div>
+      </div>
+
+      <div class="card">
+        <label for="minutes"><strong>議事録</strong>(決定事項 / ToDo / 課題 / 次回予定 を整理して書く)</label>
+        <textarea id="minutes" rows="16" placeholder="【決定事項】&#10;・&#10;&#10;【ToDo】(誰が・何を・いつまでに)&#10;・&#10;&#10;【課題・懸念】&#10;・&#10;&#10;【次回予定】&#10;・"></textarea>
+        <div class="row">
+          <button id="btn-template">テンプレートを挿入</button>
+          <span id="char-count"></span>
+        </div>
+      </div>
+      <div class="row">
+        <button id="btn-back">← 戻る</button>
+        <button id="btn-submit" class="primary">採点する</button>
+      </div>
+    </section>
+
+    <!-- 3. 結果 -->
+    <section id="screen-result" hidden>
+      <h2>採点結果</h2>
+      <div class="card score-card">
+        <div class="rank" id="res-rank"></div>
+        <div class="total"><span id="res-total"></span><small> / 100</small></div>
+        <ul class="breakdown" id="res-breakdown"></ul>
+      </div>
+      <div class="card"><h3>要点のチェック</h3><ul id="res-points" class="points"></ul></div>
+      <div class="card" id="res-warn" hidden></div>
+      <div class="card">
+        <h3>会議の台本(答え合わせ)</h3>
+        <ol id="res-script" class="script"></ol>
+      </div>
+      <div class="row">
+        <button id="btn-retry">もう一度</button>
+        <button id="btn-home" class="primary">シナリオ選択へ</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/scenarios.js"></script>
+  <script src="js/scoring.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
