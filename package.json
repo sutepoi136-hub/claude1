@@ -1,18 +1,12 @@
 {
-  "name": "pmo-practice",
-  "version": "1.0.0",
-  "description": "PMO業務をゲーム形式で練習するアプリ(議事録ゲーム)",
-  "main": "server.js",
+  "name": "gijiroku-quest",
+  "version": "2.0.0",
+  "description": "議事録クエスト — 会議を聞いて議事録を書く、PMO練習ゲーム(仕事編・魔王軍編)",
+  "private": true,
+  "license": "UNLICENSED",
   "scripts": {
-    "start": "node server.js",
     "test": "node --test \"test/*.test.js\""
   },
-  "license": "UNLICENSED",
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.131.0",
-    "zod": "^4.6.5"
-  },
-  "private": true,
   "engines": {
     "node": ">=18"
   }

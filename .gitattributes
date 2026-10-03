@@ -1,3 +1,2 @@
-# start.bat は Windows のコマンドプロンプトで動かすため、CRLF 改行・ASCII のまま変換しない
-*.bat -text
-*.sh text eol=lf
+# 改行コードはGitに任せる
+* text=auto

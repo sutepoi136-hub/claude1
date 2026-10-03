@@ -3,159 +3,73 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>議事録クエスト - PMO練習</title>
+  <title>議事録クエスト</title>
+  <meta name="description" content="会議を聞いて議事録を書く、PMO練習ゲーム。仕事編(AXプロジェクト)と魔王軍編の2つの物語。">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📝%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Shippori+Mincho+B1:wght@600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <header class="top">
-    <div class="brand"><span class="logo" aria-hidden="true">📝</span><div><b>議事録クエスト</b><small>PMO練習ゲーム</small></div></div>
+    <button type="button" class="brand" data-action="home" aria-label="ホームへ">
+      <span class="logo" aria-hidden="true">📝</span>
+      <span><b>議事録クエスト</b><small>聞いて、書いて、会議を制す</small></span>
+    </button>
     <div class="top-right">
       <div class="me" id="me" aria-label="あなたの成績"></div>
-      <button class="btn small help-main" data-help="howto" data-tip="遊び方・採点・XPなど、ゲームのルールを見る">❓ ルール</button>
+      <button type="button" class="icon-btn" data-action="settings" data-tip="名前・話す速さ・効果音などの設定">⚙ 設定</button>
+      <button type="button" class="icon-btn" data-help="howto" data-tip="遊び方・採点・XPなどのルール">❓ ルール</button>
     </div>
   </header>
 
   <main>
-    <!-- 1. ホーム(難易度を選ぶ) -->
-    <section id="screen-select">
-      <div class="hero">
-        <div class="hero-text">
-          <h1>会議を聞いて、まとめきれ!</h1>
-          <p>決定事項・ToDo・課題を拾って議事録を書き、AIと一緒にレベルアップ。</p>
-        </div>
-        <div class="hero-art" aria-hidden="true">🎧</div>
-      </div>
-      <div id="ai-status-home" class="ai-status" role="status"></div>
-
-      <h2 class="sec">🎮 難易度を選ぶ <button class="help" data-help="levels" data-tip="難易度とステージクリアの基準" aria-label="難易度の説明を見る">?</button></h2>
-      <div id="level-list" class="levels"></div>
-
-      <h2 class="sec">🏅 バッジ <button class="help" data-help="badges" data-tip="バッジの獲得条件を見る" aria-label="バッジの説明を見る">?</button></h2>
-      <div id="badge-shelf" class="badges"></div>
-
-      <h2 class="sec">📈 これまでの記録 <button class="help" data-help="data" data-tip="記録の保存場所について" aria-label="記録の説明を見る">?</button></h2>
-      <div id="history"></div>
-    </section>
-
-    <!-- 2. ステージを選ぶ -->
-    <section id="screen-stages" hidden>
-      <div class="row"><button id="btn-stages-back" class="btn">← 難易度を選びなおす</button></div>
-      <div id="stages-head" class="stages-head"></div>
-      <div id="scenario-list" class="stages"></div>
-    </section>
-
-    <!-- 3. 会議 + 議事録入力 -->
-    <section id="screen-play" hidden>
-      <h2 id="play-title" class="play-title"></h2>
-
-      <div class="room">
-        <div class="player">
-          <button id="btn-play" class="btn big primary">▶ 会議を聞く</button>
-          <button id="btn-stop" class="btn">■ 停止</button>
-          <span class="plays" id="plays" tabindex="0" data-tip="再生できる残り回数です。1ステージにつき2回まで聞けます。"><span id="plays-icons"></span><span class="sr" id="plays-left"></span></span>
-        </div>
-        <div id="cast" class="cast" aria-label="会議の参加者"></div>
-        <div id="now-speaking" class="now" aria-live="polite"></div>
-        <div id="subtitle" class="subtitle" hidden></div>
-        <div class="room-foot">
-          <label class="opt" data-tip="発言を文字でも表示します。聞き取りやすくなる代わりに難易度が下がります。"><input type="checkbox" id="opt-subtitle"> 字幕を表示(難易度が下がります)</label>
-          <span id="play-status" class="dim"></span>
-        </div>
-        <p class="dim small" id="voice-info"></p>
-      </div>
-
-      <div class="paper-card">
-        <div class="paper-head">
-          <label for="minutes"><b>📓 議事録ノート</b> <button class="help" data-help="howto" data-tip="議事録の書き方・遊び方" aria-label="遊び方を見る">?</button></label>
-          <span id="char-count" class="dim"></span>
-        </div>
-        <div class="tpl-bar">
-          <select id="tpl-select" aria-label="テンプレートを選ぶ"></select>
-          <button id="btn-tpl-insert" class="btn small" data-tip="選んだテンプレートを、カーソル位置に入れます">挿入</button>
-          <button id="btn-tpl-save" class="btn small" data-tip="いまノートに書いてある内容を、名前を付けて保存します">💾 いまの内容を保存</button>
-          <button id="btn-tpl-manage" class="btn small" data-tip="自分のテンプレートの編集・削除・既定の設定">⚙ 管理</button>
-          <button class="help" data-help="templates" data-tip="テンプレートの使い方" aria-label="テンプレートの説明を見る">?</button>
-        </div>
-        <textarea id="minutes" rows="16" placeholder="聞きながらメモ → 議事録にまとめましょう。テンプレートを入れると書きやすくなります。"></textarea>
-      </div>
-
-      <div id="ai-status-play" class="ai-status" role="status"></div>
-      <div class="row">
-        <button id="btn-back" class="btn">← ステージ選択へ</button>
-        <span class="opt-wrap">
-          <label class="opt" data-tip="オンにすると、AIが加点・減点して、赤ペン添削もしてくれます。"><input type="checkbox" id="opt-ai" checked> AI採点も使う</label>
-          <button class="help" data-help="scoring" data-tip="採点のしくみ(形式採点とAIボーナス)" aria-label="採点の説明を見る">?</button>
-          <button id="btn-submit" class="btn big primary">✅ 提出して採点</button>
-        </span>
-      </div>
-    </section>
-
-    <!-- 4. 結果 -->
-    <section id="screen-result" hidden>
-      <div class="card score-card">
-        <div class="stamp" id="res-rank" tabindex="0" data-help="rank" data-tip="あなたのランクです。クリックでランクの基準を見られます。" aria-label="ランク"></div>
-        <div class="total"><span id="res-total">0</span><small> / 100点</small></div>
-        <div id="res-new-best" class="new-best" hidden>🎉 自己ベスト更新!</div>
-        <ul class="breakdown" id="res-breakdown"></ul>
-        <div id="res-final" class="final" hidden></div>
-        <div id="res-xp" class="xpgain"></div>
-      </div>
-
-      <div class="card" id="ai-card" hidden>
-        <h3>🤖 AIによる評価 <span class="badge" id="ai-badge"></span> <button class="help" data-help="scoring" data-tip="AIボーナスの内訳と、ブレを抑える工夫" aria-label="AIボーナスの説明を見る">?</button></h3>
-        <div id="ai-body"></div>
-      </div>
-      <div class="card" id="redpen-card" hidden>
-        <h3>🖍 赤ペン添削 <button class="help" data-help="redpen" data-tip="線の色の意味と見方" aria-label="赤ペンの説明を見る">?</button></h3>
-        <div id="redpen-text" class="redpen-text"></div>
-        <ol id="redpen-list" class="redpen-list"></ol>
-      </div>
-      <div class="card">
-        <h3>📖 模範解答</h3>
-        <div class="row"><span class="hint" id="model-note">答え合わせ用の議事録です。</span>
-          <span class="btns"><button id="btn-model" class="btn small">模範解答を見る</button> <button id="btn-model-ai" class="btn small" hidden>AIで作り直す</button></span></div>
-        <pre id="model-body" class="model" hidden></pre>
-      </div>
-      <div class="card"><h3>🎯 ミッション(要点)チェック</h3><ul id="res-points" class="points"></ul></div>
-      <div class="card" id="res-warn" hidden></div>
-      <div class="card">
-        <h3>🎙 会議の台本(答え合わせ)</h3>
-        <ol id="res-script" class="script"></ol>
-      </div>
-      <div class="row">
-        <button id="btn-retry" class="btn">もう一度挑戦</button>
-        <button id="btn-home" class="btn big primary">ステージ選択へ</button>
-      </div>
-    </section>
+    <section id="view-home" class="view" aria-label="ホーム"></section>
+    <section id="view-series" class="view" aria-label="シリーズ" hidden></section>
+    <section id="view-play" class="view" aria-label="会議" hidden></section>
+    <section id="view-result" class="view" aria-label="結果" hidden></section>
   </main>
 
   <!-- ルール説明 -->
-  <dialog id="help-dialog" aria-labelledby="help-title">
-    <form method="dialog" class="dlg-head"><h3 id="help-title">📖 ゲームのルール</h3><button class="btn small" aria-label="閉じる">✕</button></form>
-    <div class="dlg-body one" id="help-body"></div>
+  <dialog id="dlg-help" aria-labelledby="dlg-help-title">
+    <form method="dialog" class="dlg-head"><h3 id="dlg-help-title">📖 ゲームのルール</h3><button class="btn small" aria-label="閉じる">✕</button></form>
+    <div class="dlg-body" id="help-body"></div>
+  </dialog>
+
+  <!-- 物語(プロローグ・その後・登場人物) -->
+  <dialog id="dlg-story" aria-labelledby="dlg-story-title">
+    <form method="dialog" class="dlg-head"><h3 id="dlg-story-title"></h3><button class="btn small" aria-label="閉じる">✕</button></form>
+    <div class="dlg-body" id="story-body"></div>
+    <div class="dlg-foot" id="story-foot"></div>
+  </dialog>
+
+  <!-- 設定 -->
+  <dialog id="dlg-settings" aria-labelledby="dlg-settings-title">
+    <form method="dialog" class="dlg-head"><h3 id="dlg-settings-title">⚙ 設定</h3><button class="btn small" aria-label="閉じる">✕</button></form>
+    <div class="dlg-body" id="settings-body"></div>
+  </dialog>
+
+  <!-- はじめに(初回だけ) -->
+  <dialog id="dlg-welcome" aria-labelledby="dlg-welcome-title">
+    <div class="dlg-head"><h3 id="dlg-welcome-title">📝 議事録クエストへようこそ</h3></div>
+    <div class="dlg-body" id="welcome-body"></div>
+    <div class="dlg-foot"><button type="button" class="btn primary big" id="welcome-start">はじめる</button></div>
   </dialog>
 
   <!-- テンプレート管理 -->
-  <dialog id="tpl-dialog" aria-labelledby="tpl-title">
-    <form method="dialog" class="dlg-head"><h3 id="tpl-title">議事録テンプレート</h3><button class="btn small" aria-label="閉じる">✕</button></form>
-    <div class="dlg-body">
+  <dialog id="dlg-tpl" aria-labelledby="dlg-tpl-title">
+    <form method="dialog" class="dlg-head"><h3 id="dlg-tpl-title">📓 議事録テンプレート</h3><button class="btn small" aria-label="閉じる">✕</button></form>
+    <div class="dlg-body dlg-split">
       <div id="tpl-list" class="tpl-list"></div>
-      <div class="tpl-editor">
-        <label class="lbl" for="tpl-name">テンプレート名</label>
-        <input id="tpl-name" type="text" maxlength="40" placeholder="例: 定例会議用">
-        <label class="lbl" for="tpl-body">内容</label>
-        <textarea id="tpl-body" rows="10" placeholder="【決定事項】&#10;・"></textarea>
-        <label class="opt"><input type="checkbox" id="tpl-default"> 新しいゲームを始めるとき、自動でノートに入れる</label>
+      <div>
+        <div class="field"><label for="tpl-name">テンプレート名</label><input id="tpl-name" type="text" maxlength="40" placeholder="例: 定例会議用"></div>
+        <div class="field"><label for="tpl-body">内容</label><textarea id="tpl-body" rows="11" placeholder="【決定事項】&#10;・"></textarea></div>
+        <label class="opt"><input type="checkbox" id="tpl-default"> 新しい会議を始めるとき、自動で議事録に入れる</label>
         <p class="hint" id="tpl-note"></p>
         <div class="row">
-          <button id="tpl-delete" class="btn small danger">削除</button>
-          <span class="btns">
-            <button id="tpl-new" class="btn small">新規にする</button>
-            <button id="tpl-save" class="btn primary">保存</button>
-          </span>
+          <button type="button" id="tpl-delete" class="btn small danger">削除</button>
+          <span class="btns"><button type="button" id="tpl-new" class="btn small">新規</button><button type="button" id="tpl-save" class="btn primary">保存</button></span>
         </div>
       </div>
     </div>
@@ -165,13 +79,34 @@
   <div id="toasts" class="toasts" aria-live="polite"></div>
   <div id="confetti" class="confetti" aria-hidden="true"></div>
 
-  <script src="js/scenarios.js"></script>
-  <script src="js/scenarios-beginner.js"></script>
-  <script src="js/scenarios-intermediate.js"></script>
-  <script src="js/scenarios-fantasy.js"></script>
-  <script src="js/scoring.js"></script>
-  <script src="js/store.js"></script>
-  <script src="js/help.js"></script>
-  <script src="js/app.js"></script>
+  <!-- 採点・ゲームの中核(画面に依存しない。テストでも読み込む) -->
+  <script src="js/core/text.js"></script>
+  <script src="js/core/parser.js"></script>
+  <script src="js/core/scorer.js"></script>
+  <script src="js/core/game.js"></script>
+  <script src="js/core/store.js"></script>
+  <!-- 物語とシナリオ(話を追加したら、ここにも1行足す) -->
+  <script src="js/data/registry.js"></script>
+  <script src="js/data/work/series.js"></script>
+  <script src="js/data/work/ep01.js"></script>
+  <script src="js/data/work/ep02.js"></script>
+  <script src="js/data/work/ep03.js"></script>
+  <script src="js/data/work/ep05.js"></script>
+  <script src="js/data/work/ep06.js"></script>
+  <script src="js/data/work/ep10.js"></script>
+  <script src="js/data/work/ep11.js"></script>
+  <script src="js/data/maou/series.js"></script>
+  <script src="js/data/maou/ep01.js"></script>
+  <script src="js/data/maou/ep02.js"></script>
+  <script src="js/data/maou/ep03.js"></script>
+  <script src="js/data/maou/ep05.js"></script>
+  <script src="js/data/maou/ep06.js"></script>
+  <script src="js/data/maou/ep11.js"></script>
+  <script src="js/data/maou/ep12.js"></script>
+  <!-- 画面 -->
+  <script src="js/ui/help.js"></script>
+  <script src="js/ui/speech.js"></script>
+  <script src="js/ui/sfx.js"></script>
+  <script src="js/ui/app.js"></script>
 </body>
 </html>
