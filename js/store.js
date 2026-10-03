@@ -9,22 +9,28 @@ const Game = (function () {
   };
   const DAY = 86400000;
 
-  // 初クリア(シナリオごと最初の1回)+20、Sランク+30 を加えた累計XP
+  // XPのルール(ルール説明の画面もこの値を使う)
+  const XP = { firstTry: 20, rankS: 30, unit: 60 };
+
+  // 得点 + 初挑戦(ステージごと最初の1回)+20 + Sランク+30 の累計XP
   function xpOf(history) {
     const seen = new Set();
     return history.reduce((sum, h) => {
       let xp = h.total;
-      if (!seen.has(h.scenarioId)) { xp += 20; seen.add(h.scenarioId); }
-      if (h.rank === 'S') xp += 30;
+      if (!seen.has(h.scenarioId)) { xp += XP.firstTry; seen.add(h.scenarioId); }
+      if (h.rank === 'S') xp += XP.rankS;
       return sum + xp;
     }, 0);
   }
 
+  // Lv.n に必要な累計XP = 60 × (n-1)²
+  const levelStart = (level) => XP.unit * (level - 1) * (level - 1);
+
   // level = floor(sqrt(xp/60)) + 1。次のレベルは 60 × level² XP
   function levelInfo(xp) {
-    const level = Math.floor(Math.sqrt(xp / 60)) + 1;
-    const floor = 60 * (level - 1) * (level - 1);
-    const next = 60 * level * level;
+    const level = Math.floor(Math.sqrt(xp / XP.unit)) + 1;
+    const floor = levelStart(level);
+    const next = levelStart(level + 1);
     return {
       level,
       title: TITLES[Math.min(level - 1, TITLES.length - 1)],
@@ -89,7 +95,7 @@ const Game = (function () {
     return best;
   }
 
-  return { TITLES, BADGES, xpOf, levelInfo, streakOf, longestStreak, badgesOf, bestByScenario, dayKey };
+  return { TITLES, BADGES, XP, levelStart, xpOf, levelInfo, streakOf, longestStreak, badgesOf, bestByScenario, dayKey };
 })();
 
 // ---- 議事録テンプレート ----

@@ -2,11 +2,14 @@
   const MAX_PLAYS = 2;
   const GAP_MS = 450; // 発言と発言の間の間(ま)
   const $ = (id) => document.getElementById(id);
-  const screens = ['select', 'play', 'result'];
+  const screens = ['select', 'stages', 'play', 'result'];
   const KIND_LABEL = { error: '誤り', improve: '改善', missing: '抜け漏れ', good: '良い点' };
-  const RANK_COLOR = { S: '#f59e0b', A: '#7c3aed', B: '#0d9488', C: '#2563eb', D: '#64748b' };
-  const LEVEL_ORDER = { 初級: 0, 中級: 1, 上級: 2 };
-  const LEVEL_STARS = { 初級: 1, 中級: 2, 上級: 3 };
+  const RANK_COLOR = { S: '#e09b00', A: '#e8590c', B: '#2f9e44', C: '#1c7ed6', D: '#868e96' };
+  const LEVELS = [
+    { id: '初級', icon: '🌱', stars: 1, blurb: '話者3人・約1〜2分。決定・ToDo・保留の区別から練習しよう。' },
+    { id: '中級', icon: '🔥', stars: 2, blurb: '話者4〜5人・約3〜5分。言い直し・数字の訂正・遅れて入る人・保留など、実際の会議に近い内容。' },
+    { id: '上級', icon: '⚡', stars: 3, blurb: '炎上案件・関係者多数など、手ごわい会議。準備中です。', soon: true },
+  ];
   const reducedMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let scenario = null;
@@ -21,6 +24,7 @@
   let tplEditingId = null;
   let aiProbe = null;
   let celebrated = false; // 結果画面ごとに紙吹雪は1回だけ
+  let currentLevel = '初級';
 
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -40,7 +44,7 @@
 
   function confetti(count = 70) {
     if (reducedMotion) return;
-    const colors = ['#ffb703', '#ff5d8f', '#5b4bd6', '#22c55e', '#38bdf8'];
+    const colors = ['#ffc42e', '#ff7a3d', '#ff5d8f', '#2f9e44', '#1c7ed6'];
     const box = $('confetti');
     for (let i = 0; i < count; i++) {
       const p = document.createElement('i');
@@ -66,9 +70,11 @@
     const h = Store.history();
     const lv = Game.levelInfo(Game.xpOf(h));
     const streak = Game.streakOf(h);
+    const lvTip = `XP(経験値)は遊ぶほど貯まります。あと${lv.next - lv.xp}XPでLv.${lv.level + 1}。クリックで詳しい説明を見られます。`;
+    const stTip = '連続プレイ日数です。毎日1回以上遊ぶと増え、1日空くと0に戻ります。';
     $('me').innerHTML =
-      `<div class="lv"><div class="t"><span>Lv.${lv.level} ${esc(lv.title)}</span><span>${lv.xp - lv.floor}/${lv.next - lv.floor} XP</span></div><div class="bar"><i style="width:${lv.pct}%"></i></div></div>` +
-      `<span class="chip" title="連続プレイ日数">🔥 ${streak}日</span>`;
+      `<div class="lv" role="button" tabindex="0" data-help="xp" data-tip="${esc(lvTip)}"><div class="t"><span>Lv.${lv.level} ${esc(lv.title)}</span><span>${lv.xp - lv.floor}/${lv.next - lv.floor} XP</span></div><div class="bar"><i style="width:${lv.pct}%"></i></div></div>` +
+      `<span class="chip" role="button" tabindex="0" data-help="streak" data-tip="${stTip}">🔥 ${streak}日</span>`;
   }
 
   function renderBadges() {
@@ -100,6 +106,7 @@
     try { data = await res.json(); } catch (e) { return { state: 'static' }; }
     if (!data || data.app !== 'pmo-practice') return { state: 'static' };
     if (data.reason === 'deps') return { state: 'deps' };
+    if (data.reason === 'badkey') return { state: 'badkey' };
     return data.ai ? { state: 'ok', mock: data.mock } : { state: 'nokey' };
   }
 
@@ -107,6 +114,7 @@
   const DIAG = {
     ok: (p) => ({ cls: 'ok', html: `<b>🤖 AI採点: 使えます${p.mock ? '(ダミー応答モード)' : ''}</b>` }),
     nokey: () => ({ cls: 'warn', html: '<b>🔑 AIサーバーは動いていますが、APIキーが未設定です</b><ol><li>フォルダ内の <code>.env.example</code> を <code>.env</code> という名前にコピー</li><li><code>.env</code> を開き、<code>ANTHROPIC_API_KEY=</code> の右にAPIキーを書いて保存</li><li>黒い画面を閉じて <code>start.bat</code> をもう一度実行</li></ol><span class="hint">キーがなくても形式採点は遊べます。</span>' }),
+    badkey: () => ({ cls: 'bad', html: '<b>🔑 APIキーの書き方が正しくありません</b><span class="hint">.env の <code>ANTHROPIC_API_KEY=</code> の右が、見本の文字のままか、日本語などの全角文字・空白が入っています。</span><ol><li><code>.env</code> をメモ帳で開く</li><li><code>ANTHROPIC_API_KEY=</code> の右に、<b>半角英数字だけ</b>でキーを貼り付けて保存(例: <code>sk-ant-api03-…</code>)</li><li>黒い画面を閉じて <code>start.bat</code> をもう一度実行</li></ol>' }),
     deps: () => ({ cls: 'bad', html: '<b>📦 AI採点に必要なパッケージが入っていません</b><ol><li>黒い画面を閉じる</li><li><code>start.bat</code>(Mac は <code>bash start.sh</code>)をもう一度実行。初回は自動でインストールされます(インターネット接続が必要)</li></ol><span class="hint">それでも直らない場合は、フォルダで <code>npm install</code> を実行したときの表示を教えてください。</span>' }),
     down: () => ({ cls: 'bad', html: `<b>🔌 AIサーバーが起動していません</b>${START_STEPS}` }),
     static: () => ({ cls: 'bad', html: `<b>⚠ このページはAIサーバーではなく、普通のWebサーバーで開かれています</b><span class="hint">(python の http.server などで起動していませんか?)</span>${START_STEPS}` }),
@@ -129,34 +137,65 @@
     return aiProbe;
   }
 
-  // ---- ホーム ----
+  // ---- ホーム(難易度を選ぶ) ----
+  const scenariosOf = (level) => SCENARIOS.filter((sc) => sc.level === level);
+  const isCleared = (best, id) => !!(best[id] && best[id].total >= CLEAR_SCORE);
+
   function renderSelect() {
     renderMe();
     const history = Store.history();
     const best = Game.bestByScenario(history);
-    // 初級→中級の順(同じ難易度は登録順)に並べる
-    const ordered = SCENARIOS.map((s, i) => [s, i]).sort((x, y) => (LEVEL_ORDER[x[0].level] ?? 9) - (LEVEL_ORDER[y[0].level] ?? 9) || x[1] - y[1]).map((x) => x[0]);
-    $('scenario-list').innerHTML = ordered.map((s) => {
-      const stars = LEVEL_STARS[s.level] || 1;
-      const b = best[s.id];
-      return `<div class="stage"><div class="ico" aria-hidden="true">${s.icon || '🎧'}</div>
-        <div><div class="ttl">${esc(s.title)}</div>
-        <div class="stars" aria-label="難易度 ${esc(s.level)}">${'★'.repeat(stars)}<s>${'★'.repeat(3 - stars)}</s> <span class="badge">${esc(s.level)}</span></div>
-        <div class="hint">${esc(s.description)}</div>
-        <div class="best">${b ? `<span class="medal" style="--rc:${RANK_COLOR[b.rank]}">${b.rank}</span>自己ベスト ${b.total}点` : '未クリア'}</div></div>
-        <button class="btn primary" data-id="${s.id}">${b ? '再挑戦' : '挑戦する'}</button></div>`;
+    const rec = LEVELS.find((l) => !l.soon && scenariosOf(l.id).some((sc) => !isCleared(best, sc.id)));
+    $('level-list').innerHTML = LEVELS.map((l) => {
+      const list = scenariosOf(l.id);
+      const cleared = list.filter((sc) => isCleared(best, sc.id)).length;
+      const pct = list.length ? Math.round((cleared / list.length) * 100) : 0;
+      const stars = `${'★'.repeat(l.stars)}<s>${'★'.repeat(3 - l.stars)}</s>`;
+      const tag = rec && rec.id === l.id ? '<span class="rec">おすすめ</span>' : '';
+      const body = `<div class="ico" aria-hidden="true">${l.icon}</div>
+        <div><div class="nm">${l.id}<span class="stars" aria-hidden="true">${stars}</span>${tag}</div>
+        <div class="bl">${esc(l.blurb)}</div>
+        ${l.soon ? '<div class="prog">🔒 準備中</div>' : `<div class="prog"><span>クリア ${cleared}/${list.length}</span><span class="pbar"><i style="width:${pct}%"></i></span></div>`}</div>
+        <div class="go" aria-hidden="true">${l.soon ? '' : '▶'}</div>`;
+      return l.soon
+        ? `<div class="level-card soon" aria-disabled="true" data-tip="上級は準備中です。初級・中級をクリアしてお待ちください。">${body}</div>`
+        : `<button type="button" class="level-card" data-level="${l.id}" data-tip="${l.id}のステージ(${list.length}本)を選びます。クリア=${CLEAR_SCORE}点以上。">${body}</button>`;
     }).join('');
-    $('scenario-list').querySelectorAll('button').forEach((el) =>
-      el.addEventListener('click', () => start(SCENARIOS.find((s) => s.id === el.dataset.id)))
-    );
+    $('level-list').querySelectorAll('[data-level]').forEach((el) => el.addEventListener('click', () => showStages(el.dataset.level)));
     renderBadges();
     const h = history.slice().reverse();
     $('history').innerHTML = !h.length
       ? '<div class="card"><p class="hint">まだ記録がありません。最初のステージに挑戦しましょう!</p></div>'
       : `<div class="card">${chartSvg(h.slice().reverse().map((x) => x.total))}` +
         h.slice(0, 10).map((x) =>
-          `<div class="h-item"><span>${new Date(x.at).toLocaleString('ja-JP')} ${esc(x.title)}${x.ai ? ' <span class="badge">AI</span>' : ''}</span><strong>${x.rank} ${x.total}点</strong></div>`
+          `<div class="h-item"><span>${new Date(x.at).toLocaleString('ja-JP')} ${esc(x.title)}${x.ai ? ' <span class="badge" data-tip="AI採点を受けた回です">AI</span>' : ''}</span><strong>${x.rank} ${x.total}点</strong></div>`
         ).join('') + '</div>';
+  }
+
+  // ---- ステージを選ぶ(難易度ごと) ----
+  function showStages(levelId) {
+    currentLevel = levelId;
+    const lv = LEVELS.find((l) => l.id === levelId) || LEVELS[0];
+    const best = Game.bestByScenario(Store.history());
+    const list = scenariosOf(lv.id);
+    const cleared = list.filter((sc) => isCleared(best, sc.id)).length;
+    renderMe();
+    $('stages-head').innerHTML = `<div class="ico" aria-hidden="true">${lv.icon}</div><div><h2>${lv.id}のステージ</h2><p>${esc(lv.blurb)}(クリア ${cleared}/${list.length})</p></div>`;
+    $('scenario-list').innerHTML = list.map((sc) => {
+      const b = best[sc.id];
+      const status = !b ? '未挑戦'
+        : b.total >= CLEAR_SCORE ? `<span class="clear">✔ クリア済み</span> <span class="medal" style="--rc:${RANK_COLOR[b.rank]}" data-tip="自己ベストのランク">${b.rank}</span> 自己ベスト ${b.total}点`
+        : `<span class="medal" style="--rc:${RANK_COLOR[b.rank]}">${b.rank}</span> 自己ベスト ${b.total}点(あと${CLEAR_SCORE - b.total}点でクリア)`;
+      return `<div class="stage"><div class="ico" aria-hidden="true">${sc.icon || '🎧'}</div>
+        <div><div class="ttl">${esc(sc.title)}</div>
+        <div class="hint">${esc(sc.description)}</div>
+        <div class="best">${status}</div></div>
+        <button class="btn primary" data-id="${sc.id}">${b ? '再挑戦' : '挑戦する'}</button></div>`;
+    }).join('');
+    $('scenario-list').querySelectorAll('button[data-id]').forEach((el) =>
+      el.addEventListener('click', () => start(SCENARIOS.find((x) => x.id === el.dataset.id)))
+    );
+    show('stages');
   }
 
   function chartSvg(values) {
@@ -218,6 +257,7 @@
   // ---- プレイ ----
   function start(s) {
     scenario = s;
+    currentLevel = s.level;
     playsLeft = MAX_PLAYS;
     stopSpeech();
     $('play-title').textContent = s.title;
@@ -342,7 +382,9 @@
     $('res-total').textContent = '0';
     $('res-new-best').hidden = true;
     $('res-breakdown').innerHTML =
-      `<li>網羅性 ${r.breakdown.coverage}/70</li><li>構造化 ${r.breakdown.structure}/15</li><li>正確性 ${r.breakdown.accuracy}/15</li>`;
+      `<li data-tip="会議の要点(決定事項・ToDo・課題・次回予定)をどれだけ拾えたか。70点満点">網羅性 ${r.breakdown.coverage}/70</li>` +
+      `<li data-tip="箇条書きや見出し、決定/ToDo/課題/次回の分類ができているか。15点満点">構造化 ${r.breakdown.structure}/15</li>` +
+      `<li data-tip="保留を決定と書く、訂正前の数字を書くなどの引っかけに乗らなかったか。15点満点">正確性 ${r.breakdown.accuracy}/15</li>`;
     $('res-final').hidden = true;
     $('res-xp').innerHTML = '';
     $('ai-card').hidden = true;
@@ -376,7 +418,7 @@
     const lvBefore = Game.levelInfo(Game.xpOf(beforeHistory));
     const lvAfter = Game.levelInfo(Game.xpOf(nowHistory));
     $('res-xp').innerHTML =
-      `<span class="pill">+${gain} XP</span>` +
+      `<span class="pill" role="button" tabindex="0" data-help="xp" data-tip="今回もらったXPです。得点+初挑戦ボーナス+Sランクボーナス。クリックで詳しい説明">+${gain} XP</span>` +
       (lvAfter.level > lvBefore.level ? `<span class="lvup">🎊 レベルアップ! Lv.${lvAfter.level}「${esc(lvAfter.title)}」</span>` : '');
     const isBest = hadBestBefore !== null && total > hadBestBefore;
     $('res-new-best').hidden = !isBest;
@@ -575,8 +617,9 @@
   $('tpl-save').addEventListener('click', saveTpl);
   $('tpl-delete').addEventListener('click', deleteTpl);
   $('tpl-new').addEventListener('click', () => loadTplEditor(null));
-  $('btn-back').addEventListener('click', () => { stopSpeech(); renderSelect(); show('select'); });
-  $('btn-home').addEventListener('click', () => { historyAt = null; renderSelect(); show('select'); });
+  $('btn-back').addEventListener('click', () => { stopSpeech(); showStages(currentLevel); });
+  $('btn-home').addEventListener('click', () => { historyAt = null; showStages(currentLevel); });
+  $('btn-stages-back').addEventListener('click', () => { renderSelect(); show('select'); });
   $('btn-retry').addEventListener('click', () => start(scenario));
   $('btn-model').addEventListener('click', () => {
     if (!$('model-body').hidden) { $('model-body').hidden = true; $('btn-model').textContent = '模範解答を見る'; return; }
@@ -584,6 +627,63 @@
   });
   $('btn-model-ai').addEventListener('click', () => showModelAnswer(true));
   if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => {};
+
+  // ---- ルール説明(「?」やチップのクリックで開く) ----
+  let helpBuilt = false;
+  function openHelp(topic) {
+    const body = $('help-body');
+    if (!helpBuilt) {
+      body.innerHTML = Help.sections().map((sec) =>
+        `<details id="help-${sec.id}"><summary><span aria-hidden="true">${sec.icon}</span> ${esc(sec.title)}</summary><div class="hbody">${sec.html}</div></details>`
+      ).join('');
+      helpBuilt = true;
+    }
+    body.querySelectorAll('details').forEach((d) => { d.open = false; });
+    const target = body.querySelector('#help-' + (topic || 'howto')) || body.querySelector('details');
+    target.open = true;
+    const dlg = $('help-dialog');
+    if (!dlg.open) { if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', ''); }
+    tip.hide();
+    target.scrollIntoView({ block: 'start' });
+  }
+
+  // ---- ツールチップ(マウスを乗せる/キーボードでフォーカスすると説明を表示) ----
+  const tip = (function () {
+    const el = $('tip');
+    let current = null;
+    function show(target) {
+      const text = target.dataset.tip;
+      if (!text || target.closest('dialog')) return;
+      current = target;
+      el.textContent = text;
+      el.hidden = false;
+      const r = target.getBoundingClientRect();
+      const w = el.offsetWidth, h = el.offsetHeight;
+      const left = Math.min(Math.max(r.left + r.width / 2 - w / 2, 8), window.innerWidth - w - 8);
+      const below = r.bottom + 8 + h <= window.innerHeight - 8;
+      el.style.left = left + 'px';
+      el.style.top = (below ? r.bottom + 8 : Math.max(8, r.top - h - 8)) + 'px';
+    }
+    function hide() { current = null; el.hidden = true; }
+    document.addEventListener('mouseover', (e) => { const t = e.target.closest && e.target.closest('[data-tip]'); if (t) show(t); else if (current) hide(); });
+    document.addEventListener('focusin', (e) => { const t = e.target.closest && e.target.closest('[data-tip]'); if (t) show(t); });
+    document.addEventListener('focusout', hide);
+    document.addEventListener('scroll', hide, true);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hide(); });
+    // タッチ端末: タップで表示し、別の場所をタップすると消える
+    document.addEventListener('click', (e) => { if (!(e.target.closest && e.target.closest('[data-tip]'))) hide(); });
+    return { hide };
+  })();
+
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest && e.target.closest('[data-help]');
+    if (t) { e.preventDefault(); openHelp(t.dataset.help); }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const t = e.target.closest && e.target.closest('[data-help]');
+    if (t && t.tagName !== 'BUTTON') { e.preventDefault(); openHelp(t.dataset.help); }
+  });
 
   renderSelect();
   show('select');

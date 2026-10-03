@@ -1,7 +1,7 @@
 // 静的ファイル配信 + AI採点API。APIキーはサーバー側の環境変数(ANTHROPIC_API_KEY)だけで使う。
 // 起動: npm start   (PMO_MOCK_AI=1 でAPIキー無しの動作確認)
 const http = require('node:http');
-const { loadEnvFile } = require('./lib/env.js');
+const { loadEnvFile, apiKeyProblem } = require('./lib/env.js');
 loadEnvFile(require('node:path').join(__dirname, '.env'));
 const fs = require('node:fs');
 const path = require('node:path');
@@ -26,9 +26,13 @@ const ROOT = __dirname;
 const PUBLIC = [/^\/$/, /^\/index\.html$/, /^\/css\/[\w.-]+$/, /^\/js\/[\w.-]+$/];
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
 
+const KEY_MESSAGE = 'APIキーの形式が正しくありません。.env の ANTHROPIC_API_KEY が見本のままか、日本語などの全角文字・空白が入っています。キーを半角英数字だけで書き直してください。';
 let client = null;
+// APIキーに問題があれば 'nonascii' | 'short'、なければ null
+const keyProblem = () => apiKeyProblem(process.env.ANTHROPIC_API_KEY);
+
 function getClient() {
-  if (depsError) return null;
+  if (depsError || keyProblem()) return null;
   if (client) return client;
   if (process.env.PMO_MOCK_AI === '1') return (client = require('./lib/mock-client.js').mockClient());
   if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) return null;
@@ -58,10 +62,11 @@ function readJson(req) {
 
 async function handleApi(req, res, pathname) {
   if (req.method === 'GET' && pathname === '/api/status') {
-    return send(res, 200, { app: 'pmo-practice', ai: !!getClient(), mock: process.env.PMO_MOCK_AI === '1', reason: depsError ? 'deps' : undefined });
+    return send(res, 200, { app: 'pmo-practice', ai: !!getClient(), mock: process.env.PMO_MOCK_AI === '1', reason: depsError ? 'deps' : keyProblem() ? 'badkey' : undefined });
   }
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
   if (depsError) return send(res, 503, { error: 'deps', message: '必要なパッケージが入っていません。npm install を実行してください。' });
+  if (keyProblem()) return send(res, 503, { error: 'badkey', message: KEY_MESSAGE });
   const c = getClient();
   if (!c) return send(res, 503, { error: 'no_key', message: 'AI採点は未設定です(サーバーに ANTHROPIC_API_KEY が必要です)。' });
   try {
@@ -79,8 +84,10 @@ async function handleApi(req, res, pathname) {
     if (e instanceof AiError) return send(res, e.code === 'too_long' || e.code === 'too_large' ? 413 : 502, { error: e.code, message: e.message });
     console.error('[api error]', e && e.status, e && e.message);
     const status = e && e.status;
+    const badHeader = e instanceof TypeError && /ByteString|header/i.test(e.message || '');
     const message =
-      status === 401 || status === 403 ? 'APIキーが無効、または権限がありません。.env の ANTHROPIC_API_KEY を確認してください。'
+      badHeader ? KEY_MESSAGE
+      : status === 401 || status === 403 ? 'APIキーが無効、または権限がありません。.env の ANTHROPIC_API_KEY を確認してください。'
       : status === 404 ? `モデルが見つかりません(${process.env.PMO_AI_MODEL || '既定モデル'})。.env の PMO_AI_MODEL を確認してください。`
       : status === 429 ? 'リクエストが多すぎます。少し待ってから再試行してください。'
       : status === 400 ? 'APIが要求を受け付けませんでした(残高不足の可能性があります)。サーバーのログを確認してください。'
@@ -112,6 +119,8 @@ if (require.main === module) {
     console.log(`  議事録クエスト を起動しました → ブラウザで http://localhost:${PORT} を開いてください`);
     console.log(depsError
       ? '  AI採点: 使えません(パッケージ未インストール。npm install を実行してください)'
+      : keyProblem()
+      ? '  AI採点: 使えません(.env の ANTHROPIC_API_KEY が見本のままか、全角文字が入っています)'
       : getClient()
       ? '  AI採点: 使えます'
       : '  AI採点: 未設定(形式採点だけ使えます)。使うには .env に ANTHROPIC_API_KEY=... を書いて再起動してください');

@@ -13,8 +13,12 @@ function hit(point, text) {
   return point.all.every((group) => group.some((kw) => text.includes(normalize(kw))));
 }
 
+// ランクの下限点(上から順に判定)。ルール説明の画面もこの値を使う
+const RANKS = [['S', 90], ['A', 75], ['B', 60], ['C', 40], ['D', 0]];
+const CLEAR_SCORE = 60; // ステージクリアの基準点(Bランク以上)
+
 function rankOf(total) {
-  return total >= 90 ? 'S' : total >= 75 ? 'A' : total >= 60 ? 'B' : total >= 40 ? 'C' : 'D';
+  return RANKS.find(([, min]) => total >= min)[0];
 }
 
 function evaluate(scenario, minutes) {
@@ -52,4 +56,4 @@ function evaluate(scenario, minutes) {
   };
 }
 
-if (typeof module !== 'undefined') module.exports = { evaluate, rankOf, TYPE_LABELS };
+if (typeof module !== 'undefined') module.exports = { evaluate, rankOf, RANKS, CLEAR_SCORE, TYPE_LABELS };
