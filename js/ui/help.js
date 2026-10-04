@@ -9,6 +9,9 @@
     const W = S.WEIGHT;
     const ranks = S.RANKS.map(([r, min], i) => (i === S.RANKS.length - 1 ? `<b>${r}</b> ${S.RANKS[i - 1][1] - 1}点以下` : `<b>${r}</b> ${min}点以上`)).join(' / ');
     const levels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((l) => `<li>Lv.${l}「${G.TITLES[l - 1]}」… 累計 ${G.levelStart(l)} XP から</li>`).join('');
+    const conv = (total, level) => Math.round(G.toScore(G.performance(total, level, false)));
+    const exTheta = G.performance(70, '中級', false);
+    const bonus = Object.entries(G.XP.levelBonus).filter(([, v]) => v > 0).map(([lv, v]) => `${lv} +${Math.round(v * 100)}%`).join('、');
     const badges = G.BADGES.map((b) => `<li>${b.icon} <b>${b.name}</b> … ${b.desc}</li>`).join('');
     return [
       {
@@ -37,6 +40,18 @@
           <li>1つの行には1つのことを。ToDoは「担当: 内容(期限)」の形がおすすめです。</li>
           <li>個人的な打ち明け話などは、議事録に残さない配慮も、実務では大切です(採点はしません)。</li></ul>`,
       },
+      {
+        id: 'skill', icon: '📈', title: '実力(難易度をならした力の推移)',
+        html: `<p>得点は、会議の難しさで上下します。上級で${60}点を取る力と、初級で${85}点を取る力は、ほぼ同じくらいです。そこでホーム画面では、得点そのものではなく、<b>実力</b>の推移を表示します。</p>
+          <ul>
+            <li><b>実力換算</b> … 1回ごとの結果を「<b>中級の会議なら何点に当たるか</b>」に直した値です。例: 上級で60点 → 中級なら約${conv(60, '上級')}点。初級で85点 → 中級なら約${conv(85, '初級')}点。</li>
+            <li><b>字幕あり</b>の回は、聞き取りが楽になるぶん、一段やさしい会議として換算します。</li>
+            <li><b>同じ会議の2回目以降</b>は、台本や模範解答を見たあとなので、実力への反映を小さく(初見の${Math.round(G.SKILL.retryWeight * 100)}%)しています。初見の結果こそが、本当の力です。</li>
+            <li><b>実力</b> … 実力換算をならした値です(最初の数回は平均、その後は直近の結果ほど重く)。</li>
+            <li>実力から、難易度ごとの<b>見込み点</b>も出します。例: 実力70なら、初級 約${G.expectedScore(exTheta, '初級')}点・中級 約70点・上級 約${G.expectedScore(exTheta, '上級')}点。</li>
+          </ul>
+          <p>推移のグラフは「得点(難易度別)」に切り替えると、難易度ごとの生の得点も見られます。</p>`,
+      },
       { id: 'rank', icon: '🏅', title: 'ランクとクリア', html: `<p>${ranks}</p><p><b>${S.CLEAR}点以上(Bランク以上)でクリア</b>です。クリアすると、次の話が解放され、物語の続き(その後の出来事)が読めます。</p>` },
       {
         id: 'redpen', icon: '🖍', title: '赤ペン添削と振り返り',
@@ -54,6 +69,7 @@
       {
         id: 'xp', icon: '⭐', title: 'XP・レベル・称号',
         html: `<ul><li>得点がそのままXPになります(字幕ありで遊んだ回は半分)。</li>
+          <li>難しい会議ほど点は取りにくいので、<b>難易度ボーナス</b>を上乗せします(得点XPの ${bonus})。</li>
           <li>初挑戦ボーナス +${G.XP.firstTry}、初クリアボーナス +${G.XP.firstClear}、Sランクボーナス +${G.XP.rankS}</li></ul>
           <p>Lv.n に必要な累計XPは ${G.XP.unit} × (n−1)² です。</p><ul>${levels}</ul>`,
       },

@@ -159,15 +159,82 @@
       <polygon points="${poly(values)}" fill="rgba(28,34,48,.10)" stroke="#1c2230" stroke-width="2" stroke-linejoin="round"/>${labels}</svg>`;
   }
 
-  function chartSvg(values) {
-    const v = values.slice(-20);
-    if (v.length < 2) return '<p class="hint" style="padding:30px 0;text-align:center">2回以上提出すると、得点の推移が表示されます。</p>';
-    const W = 600, H = 120, pad = 10;
-    const pts = v.map((y, i) => [pad + (i * (W - pad * 2)) / (v.length - 1), H - pad - (y / 100) * (H - pad * 2)]);
-    const clearY = H - pad - (Scorer.CLEAR / 100) * (H - pad * 2);
-    return `<svg id="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="得点の推移">
-      <line x1="0" x2="${W}" y1="${clearY}" y2="${clearY}" stroke="#b3352c" stroke-dasharray="4 5" stroke-width="1" opacity=".55" vector-effect="non-scaling-stroke"/>
-      <polyline fill="none" stroke="#1c2230" stroke-width="2" stroke-linejoin="round" points="${pts.map((p) => p.join(',')).join(' ')}" vector-effect="non-scaling-stroke"/></svg>`;
+  // ---- 実力の推移(難易度・字幕・再挑戦をならした値)と、難易度別の得点
+  const LV_COLOR = { 初級: '#3d8a5a', 中級: '#c58a1d', 上級: '#b3352c' };
+  let trendMode = 'skill';
+  // 難易度の印(色だけに頼らず、形でも見分けられるように: 初級=丸、中級=四角、上級=三角)
+  function marker(level, x, y, r, filled, title) {
+    const c = LV_COLOR[level] || '#1c2230';
+    const a = `fill="${filled ? c : '#fff'}" stroke="${c}" stroke-width="1.6"`;
+    const t = title ? `<title>${esc(title)}</title>` : '';
+    const f = (n) => n.toFixed(1);
+    if (level === '中級') return `<rect x="${f(x - r)}" y="${f(y - r)}" width="${f(r * 2)}" height="${f(r * 2)}" ${a}>${t}</rect>`;
+    if (level === '上級') return `<polygon points="${f(x)},${f(y - r * 1.25)} ${f(x + r * 1.15)},${f(y + r * 0.85)} ${f(x - r * 1.15)},${f(y + r * 0.85)}" ${a}>${t}</polygon>`;
+    return `<circle cx="${f(x)}" cy="${f(y)}" r="${f(r)}" ${a}>${t}</circle>`;
+  }
+  function trendSvg(h, mode) {
+    const N = 30;
+    const log = Game.skillLog(h);
+    const from = Math.max(0, h.length - N);
+    const rows = log.slice(from).map((x, i) => ({ ...x, h: h[from + i] }));
+    if (rows.length < 2) return '<p class="hint chart-empty">2回以上提出すると、推移が表示されます。</p>';
+    // 狭い画面では横幅を詰めて、文字が小さくなりすぎないようにする
+    const W = root.innerWidth < 640 ? 380 : 640, H = 230, L = 30, R = 40, T = 14, B = 24;
+    const X = (i) => L + (i * (W - L - R)) / (rows.length - 1);
+    const Y = (v) => T + (1 - v / 100) * (H - T - B);
+    const pts = (list) => list.map(([i, v]) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+    const day = (t) => new Date(t).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' });
+    const tip = (x) => {
+      const ep = Data.byId(x.h.episodeId);
+      const name = ep ? `${epTag(ep)}「${ep.title}」` : x.h.episodeId;
+      const notes = [x.retry ? '再挑戦: 反映は小さく' : '', x.assist ? '字幕あり' : ''].filter(Boolean).join('・');
+      return `${day(x.h.at)} ${name}(${x.level}) ${x.total}点 → 実力換算 ${x.perf}${notes ? `(${notes})` : ''}`;
+    };
+    const grid = [0, 20, 40, 60, 80, 100].map((v) => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="g"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`).join('');
+    const clear = `<line x1="${L}" x2="${W - R}" y1="${Y(Scorer.CLEAR)}" y2="${Y(Scorer.CLEAR)}" class="clear"/>`;
+    const dates = `<text x="${L}" y="${H - 6}">${day(rows[0].h.at)}</text><text x="${W - R}" y="${H - 6}" text-anchor="end">${day(rows[rows.length - 1].h.at)}</text>`;
+    let body = '';
+    if (mode === 'skill') {
+      const last = rows[rows.length - 1];
+      body = `<polyline points="${pts(rows.map((x, i) => [i, x.skill]))}" class="skill"/>`
+        + rows.map((x, i) => marker(x.level, X(i), Y(x.perf), x.retry || x.assist ? 3.4 : 4.2, !(x.retry || x.assist), tip(x))).join('')
+        + `<circle cx="${X(rows.length - 1)}" cy="${Y(last.skill)}" r="5" class="now"/><text x="${X(rows.length - 1) + 9}" y="${Y(last.skill) + 4}" class="now-lab">${last.skill}</text>`;
+    } else {
+      body = ['初級', '中級', '上級'].map((lv) => {
+        const list = rows.map((x, i) => [i, x]).filter(([, x]) => x.level === lv);
+        if (!list.length) return '';
+        return `<polyline points="${pts(list.map(([i, x]) => [i, x.total]))}" fill="none" stroke="${LV_COLOR[lv]}" stroke-width="1.6" stroke-linejoin="round" opacity=".85"/>`
+          + list.map(([i, x]) => marker(lv, X(i), Y(x.total), 4, true, `${day(x.h.at)} ${Data.byId(x.h.episodeId) ? epTag(Data.byId(x.h.episodeId)) : ''}(${lv}) ${x.total}点`)).join('');
+      }).join('');
+    }
+    return `<svg class="trend" viewBox="0 0 ${W} ${H}" role="img" aria-label="${mode === 'skill' ? '実力の推移' : '難易度別の得点の推移'}">${grid}${clear}${body}${dates}</svg>`;
+  }
+  function trendLegend(mode) {
+    const lv = ['初級', '中級', '上級'].map((l) => `<span><svg viewBox="0 0 12 12" aria-hidden="true">${marker(l, 6, 6, 4, true)}</svg>${l}</span>`).join('');
+    return mode === 'skill'
+      ? `<div class="tlegend">${lv}<span><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="3.6" fill="#fff" stroke="#7a8092" stroke-width="1.6"/></svg>再挑戦・字幕あり</span><span><i class="ln"></i>実力</span><span><i class="ln dash"></i>クリアライン</span></div>
+        <p class="hint">点は1回ごとの「実力換算」(中級の会議なら何点に当たるか)。線は、それをならした実力です。</p>`
+      : `<div class="tlegend">${lv}<span><i class="ln dash"></i>クリアライン(${Scorer.CLEAR}点)</span></div><p class="hint">難易度ごとの、生の得点です。</p>`;
+  }
+  function trendCard(h) {
+    const now = Game.skillNow(h);
+    const head = now
+      ? `<div class="skill-now">
+          <div><span class="lab">実力 <small>中級換算</small></span><b class="num">${now.skill}</b>${now.trend != null ? `<span class="delta ${now.trend > 0 ? 'up' : now.trend < 0 ? 'down' : ''}">${now.trend > 0 ? '▲' : now.trend < 0 ? '▼' : '±'}${Math.abs(now.trend)}<small>直近5回</small></span>` : ''}</div>
+          <div class="expect"><span class="lab">見込み点</span>${['初級', '中級', '上級'].map((l) => `<span>${l} <b class="num">${now.expected[l]}</b></span>`).join('')}</div>
+        </div>`
+      : '';
+    return `<div class="trend-head"><h3>実力の推移</h3>
+        <div class="seg" role="tablist" aria-label="グラフの表示">${[['skill', '実力'], ['score', '得点(難易度別)']].map(([m, name]) => `<button type="button" role="tab" data-trend="${m}" aria-selected="${trendMode === m}">${name}</button>`).join('')}</div>
+        <button type="button" class="help" data-help="skill">${icon('help')}実力とは</button></div>
+      ${head}
+      <div id="trend-body">${trendSvg(h, trendMode)}${h.length >= 2 ? trendLegend(trendMode) : ''}</div>`;
+  }
+  function setTrendMode(m) {
+    trendMode = m;
+    const h = Store.history();
+    document.querySelectorAll('[data-trend]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.trend === m)));
+    $('trend-body').innerHTML = trendSvg(h, m) + (h.length >= 2 ? trendLegend(m) : '');
   }
 
   function volCard(s, h, i) {
@@ -179,14 +246,14 @@
         <span class="emblem" aria-hidden="true">${EMBLEM[s.id] || ''}</span>
         <span class="vno">VOL.${i + 1} — ${esc(s.name)}</span>
         <h3>${esc(s.title)}</h3>
-        <span class="sub">全${s.plan.length}話 ・ 配信中 ${prog.total}話</span>
+        <span class="sub">全${s.plan.length}話${prog.total < s.plan.length ? ` ・ 配信中 ${prog.total}話` : ''}</span>
       </div>
       <div class="vol-body">
         <p class="tagline">${esc(s.tagline)}</p>
         <div class="vol-prog"><b class="num">${prog.cleared} / ${prog.total}</b><span class="bar"><i style="width:${pct}%"></i></span><span>話クリア</span></div>
         ${next
           ? `<div class="next-up"><span class="lab">次の会議</span><b>第${next.no}話「${esc(next.title)}」</b>${lvTag(next.level)}</div>`
-          : '<div class="next-up"><span class="lab">完了</span><b>配信中の話をすべてクリアしました</b></div>'}
+          : `<div class="next-up"><span class="lab">完了</span><b>${prog.total < s.plan.length ? '配信中の話をすべてクリアしました' : '全話をクリアしました'}</b></div>`}
         <div class="btns">
           ${next ? `<button type="button" class="btn primary" data-action="play" data-id="${next.id}">${icon('play')}第${next.no}話を始める</button>` : ''}
           <button type="button" class="btn" data-action="series" data-id="${s.id}">${icon('list')}目次と登場人物</button>
@@ -203,7 +270,8 @@
     const recent = h.slice().reverse().slice(0, 6);
     const lv = Game.levelInfo(Game.xpOf(h));
     const clearedN = Game.clearedSet(h).size;
-    const best = h.length ? Math.max(...h.map((x) => x.total)) : null;
+    const now = Game.skillNow(h);
+    const slog = Game.skillLog(h);
     $('view-home').innerHTML = `
       <section class="hero">
         <div>
@@ -235,20 +303,22 @@
         <div class="kpi"><div class="lab">レベル</div><div class="val">${lv.level}<small>${esc(lv.title)}</small></div></div>
         <div class="kpi"><div class="lab">累計XP</div><div class="val num">${lv.xp}</div></div>
         <div class="kpi"><div class="lab">クリアした会議</div><div class="val num">${clearedN}<small>/ ${Data.episodes.length}</small></div></div>
-        <div class="kpi"><div class="lab">最高得点</div><div class="val num">${best == null ? '—' : best}<small>${best == null ? '' : '点'}</small></div></div>
+        <div class="kpi"><div class="lab">実力(中級換算)</div><div class="val num">${now ? now.skill : '—'}<small>${now ? '/ 100' : ''}</small></div></div>
       </div>
       <div class="stats">
         <div class="card pad"><h3>直近10回のバランス</h3>${avg ? radarSvg(avg) : '<p class="hint" style="padding:40px 0;text-align:center">提出すると、5つの観点のバランスが表示されます。</p>'}</div>
-        <div class="card pad"><h3>得点の推移 <span class="hint" style="font-weight:500">— 破線はクリアライン(${Scorer.CLEAR}点)</span></h3>${chartSvg(h.map((x) => x.total))}
-          ${recent.length ? `<ul class="log">${recent.map((x) => {
+        <div class="card pad trend-card">${trendCard(h)}
+          ${recent.length ? `<ul class="log">${recent.map((x, k) => {
             const ep = Data.byId(x.episodeId);
-            return `<li><time>${new Date(x.at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}</time><span>${ep ? esc(epTag(ep) + '「' + ep.title + '」') : esc(x.episodeId)}${x.assist ? ' <span class="tag plain">字幕</span>' : ''}</span><span class="sc num">${x.rank} ・ ${x.total}点</span></li>`;
+            const sk = slog[h.length - 1 - k];
+            return `<li><time>${new Date(x.at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}</time><span>${ep ? esc(epTag(ep) + '「' + ep.title + '」') : esc(x.episodeId)} ${ep ? lvTag(ep.level) : ''}${x.assist ? ' <span class="tag plain">字幕</span>' : ''}${sk.retry ? ' <span class="tag plain">再挑戦</span>' : ''}</span><span class="sc num">${x.rank} ・ ${x.total}点<small>換算 ${sk.perf}</small></span></li>`;
           }).join('')}</ul>` : ''}
         </div>
       </div>
 
       <div class="sec-head"><h2>バッジ</h2><span class="muted num">${earned.size} / ${Game.BADGES.length}</span><button type="button" class="help" data-help="badges">${icon('help')}条件</button></div>
       <div class="badges">${Game.BADGES.map((b) => `<div class="bd ${earned.has(b.id) ? 'earned' : 'locked'}"><span class="ic">${icon(earned.has(b.id) ? BADGE_ICON[b.id] || 'star' : 'lock')}</span><div><b>${esc(b.name)}</b><small>${esc(b.desc)}</small></div></div>`).join('')}</div>`;
+    document.querySelectorAll('[data-trend]').forEach((b) => b.addEventListener('click', () => { Sfx.play('tick'); setTrendMode(b.dataset.trend); }));
     show('home');
     Bgm.play('home');
   }
@@ -303,7 +373,7 @@
             <button type="button" class="btn ghost" data-action="prologue" data-id="${s.id}">${icon('open')}プロローグ</button>
           </div>
         </div>
-        <div class="stat"><div class="big num">${prog.cleared}<small> / ${prog.total}</small></div><div class="lab">話クリア(全${s.plan.length}話中 ${prog.total}話 配信中)</div></div>
+        <div class="stat"><div class="big num">${prog.cleared}<small> / ${prog.total}</small></div><div class="lab">話クリア${prog.total < s.plan.length ? `(全${s.plan.length}話中 ${prog.total}話 配信中)` : `(全${s.plan.length}話)`}</div></div>
       </header>
       <div class="series-grid">
         <div class="toc">
@@ -676,6 +746,8 @@
     };
     const after = before.concat([entry]);
     Store.saveHistory(after);
+    const skBefore = Game.skillNow(before);
+    const skLog = Game.skillLog(after);
     const xpParts = Game.xpLog(after)[after.length - 1];
     const lvBefore = Game.levelInfo(Game.xpOf(before));
     const lvAfter = Game.levelInfo(Game.xpOf(after));
@@ -693,6 +765,7 @@
       firstClear: !wasCleared && r.total >= Scorer.CLEAR,
       isBest: !!prevBest && r.total > prevBest.total, prevBest: prevBest ? prevBest.total : null,
       newBadges, shown: false, tab: 'pen',
+      skill: { ...skLog[skLog.length - 1], before: skBefore ? skBefore.skill : null },
     };
     session = null;
     go('#/r/' + ep.id);
@@ -819,6 +892,7 @@
           <span class="eyebrow">総合得点</span>
           <div class="score num"><span id="res-total">0</span><small>/ 100</small></div>
           <div class="verdict">${pass ? `<span class="tag ok">${icon('check')}${R.firstClear ? 'クリア' : 'クリア済み'}</span>` : `<span class="tag new">あと${Scorer.CLEAR - r.total}点でクリア</span>`}${R.entry.assist ? '<span class="tag plain">字幕あり</span>' : ''}</div>
+          ${skillLine(R, ep)}
           <p class="xp">獲得 <b class="num">+${R.xpParts.xp} XP</b>(${R.xpParts.parts.map((p) => `${esc(p.label)} ${p.xp}`).join('・')})${R.entry.writeSec != null ? ` ・ 会議終了から提出まで ${fmtSec(R.entry.writeSec)}` : ''}</p>
           ${events.length ? `<ul class="events">${events.map(([ic, t]) => `<li>${icon(ic)}${esc(t)}</li>`).join('')}</ul>` : ''}
         </div>
@@ -861,6 +935,16 @@
     if (R.newBadges.length) extra.push('badge');
     extra.forEach((name, i) => effectTimers.push(setTimeout(() => Sfx.play(name), 2300 + i * 700)));
     Bgm.play(track, { delay: 3.5 + extra.length * 0.7, fade: 4 });
+  }
+  // 結果画面: この回の実力換算と、実力の変化
+  function skillLine(R, ep) {
+    const k = R.skill;
+    if (!k) return '';
+    const d = k.before == null ? null : k.skill - k.before;
+    const change = d == null
+      ? `実力 <b class="num">${k.skill}</b>(はじめての測定)`
+      : `実力 ${k.before} → <b class="num">${k.skill}</b> <span class="delta ${d > 0 ? 'up' : d < 0 ? 'down' : ''}">${d > 0 ? '▲' : d < 0 ? '▼' : '±'}${Math.abs(d)}</span>`;
+    return `<div class="skill-line">${icon('target')}<span>実力換算 <b class="num">${k.perf}</b><small>(${esc(ep.level)}${k.assist ? '・字幕あり' : ''}の${R.r.total}点を、中級の会議に換算)</small></span><span>${change}</span>${k.retry ? '<small class="note">同じ会議の2回目以降は、実力への反映を小さくしています</small>' : ''}<button type="button" class="help" data-help="skill">${icon('help')}</button></div>`;
   }
   // 結果画面の遅れて鳴る演出は、画面を離れたら取り消す
   const effectTimers = [];
